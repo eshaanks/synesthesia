@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Synesthesia — pipeline test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #000;
+      color: rgba(255,255,255,0.7);
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      gap: 20px;
+    }
+    #display {
+      width: 640px;
+      height: 400px;
+      background: #111;
+      border: 0.5px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+    #display img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 1.5s ease;
+    }
+    #display img.visible { opacity: 1; }
+    #info {
+      font-size: 11px;
+      letter-spacing: .08em;
+      color: rgba(255,255,255,0.3);
+      text-align: center;
+    }
+    #score {
+      font-size: 22px;
+      font-weight: 300;
+      color: rgba(255,255,255,0.6);
+    }
+    button {
+      padding: 10px 24px;
+      background: transparent;
+      border: 0.5px solid rgba(255,255,255,0.3);
+      color: rgba(255,255,255,0.7);
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button.active { border-color: #ff3b3b; color: #ff3b3b; }
+    #log {
+      font-size: 10px;
+      color: rgba(255,255,255,0.25);
+      letter-spacing: .05em;
+      height: 40px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="display">
+    <img id="img" src="" />
+  </div>
+
+  <div id="score">—</div>
+  <div id="info">top match</div>
+  <button id="btn" onclick="toggleMic()">start mic</button>
+  <div id="log">waiting...</div>
+
+<script>
+const SERVER = "http://localhost:5001";
+const CHUNK_MS = 2000;
+
+let stream, intervalId, recording = false;
+
+async function toggleMic() {
+  const btn = document.getElementById("btn");
+  if (!recording) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      recording = true;
+      btn.textContent = "stop mic";
+      btn.classList.add("active");
+      log("mic open — chunking every 2s");
+      startChunking();
+    } catch(e) {
+      log("mic denied: " + e.message);
+    }
+  } else {
+    recording = false;
+    btn.textContent = "start mic";
+    btn.classList.remove("active");
+    clearInterval(intervalId);
+    stream.getTracks().forEach(t => t.stop());
+    log("mic closed");
+  }
+}
+
+function startChunking() {
+  intervalId = setInterval(() => {
+    if (!recording) return;
+
+    const recorder = new MediaRecorder(stream);
+    const chunks = [];
+
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: "audio/webm" });
+      await sendChunk(blob);
+    };
+
+    recorder.start();
+    setTimeout(() => recorder.stop(), CHUNK_MS);
+  }, CHUNK_MS);
+}
+
+async function sendChunk(blob) {
+  log("sending chunk...");
+  const form = new FormData();
+  form.append("audio", blob, "chunk.webm");
+
+  try {
+    const res = await fetch(`${SERVER}/search`, {
+      method: "POST",
+      body: form
+    });
+    const data = await res.json();
+
+    if (data.matches && data.matches.length > 0) {
+      const top = data.matches[0];
+      showImage(`${SERVER}/image/${top.filename}`);
+      document.getElementById("score").textContent = top.score.toFixed(4);
+      document.getElementById("info").textContent = top.filename;
+      log(`matched: ${top.filename} (${top.score.toFixed(4)})`);
+    } else {
+      log("no matches returned");
+    }
+  } catch(e) {
+    log("server error: " + e.message);
+  }
+}
+
+function showImage(src) {
+  const img = document.getElementById("img");
+  img.classList.remove("visible");
+  setTimeout(() => {
+    img.src = src;
+    img.classList.add("visible");
+  }, 200);
+}
+
+function log(msg) {
+  document.getElementById("log").textContent = msg;
+  console.log(msg);
+}
+
+// confirm server is up on load
+fetch(`${SERVER}/health`)
+  .then(r => r.json())
+  .then(d => log(`server ready — ${d.images} images in database`))
+  .catch(() => log("server not reachable — start server.py first"));
+</script>
+</body>
+</html>
