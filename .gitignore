@@ -1,0 +1,15 @@
+# python
+__pycache__/
+*.pyc
+imagebind-env/
+*.pt
+*.pth
+
+# large files
+dataset/
+embeddings/
+assets/*.wav
+assets/*.jpg
+
+# system
+.DS_Store
