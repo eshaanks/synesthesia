@@ -13,3 +13,16 @@ assets/*.jpg
 
 # system
 .DS_Store
+
+# image datasets — never commit these
+full_dataset/
+test_dataset/
+dataset/
+embeddings/
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.avif
+*.bmp
+*.tiff
