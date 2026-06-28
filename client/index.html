@@ -6,19 +6,40 @@
 </head>
 <body>
 
-  <div id="display">
-    <canvas id="glCanvas" width="640" height="400"></canvas>
+  <div id="bg-blur">
+    <canvas id="bgCanvas"></canvas>
   </div>
 
-  <div id="score">—</div>
-  <div id="info">top match</div>
-  <button id="btn" onclick="toggleMic()">start mic</button>
-  <div id="log">waiting...</div>
+  <div id="app">
+    <div id="display">
+      <canvas id="glCanvas" width="900" height="560"></canvas>
+    </div>
 
-  <!-- load order matters: config first, then gl, then transition, then mic -->
+    <div id="visualizers">
+      <div class="viz-panel">
+        <canvas id="micCanvas" width="440" height="60"></canvas>
+        <div class="viz-label">mic input</div>
+      </div>
+      <div class="viz-divider"></div>
+      <div class="viz-panel">
+        <canvas id="playbackCanvas" width="440" height="60"></canvas>
+        <div class="viz-label">image memory</div>
+      </div>
+    </div>
+
+    <div id="hud">
+      <div id="info">—</div>
+      <div id="score">—</div>
+    </div>
+
+    <button id="btn" onclick="toggleMic()">start mic</button>
+    <div id="log">waiting...</div>
+  </div>
+
   <script src="js/config.js"></script>
   <script src="js/gl.js"></script>
   <script src="js/transition.js"></script>
+  <script src="js/visualizer.js"></script>
   <script src="js/mic.js"></script>
 
 </body>

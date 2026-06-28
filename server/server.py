@@ -9,36 +9,44 @@ from imagebind import data
 from imagebind.models import imagebind_model
 from imagebind.models.imagebind_model import ModalityType
 
-# ── app setup ────────────────────────────────────────────────
 app = Flask(__name__)
 CORS(app)
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATASET_DIR = os.path.join(BASE_DIR, "dataset")
-EMBEDDINGS_PATH = os.path.join(BASE_DIR, "embeddings", "image_database.json")
+BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATASET_DIR = os.path.join(BASE_DIR, "full_dataset")
+EMBEDDINGS  = os.path.join(BASE_DIR, "embeddings", "full_database.json")
 
-# ── load model once at startup ───────────────────────────────
-device = "mps" if torch.backends.mps.is_available() else "cpu"
-print(f"[server] loading ImageBind on {device}...")
 os.chdir(os.path.join(BASE_DIR, "..", "ImageBind"))
+
+device = "mps" if torch.backends.mps.is_available() else "cpu"
+print(f"[server] loading model on {device}...")
 model = imagebind_model.imagebind_huge(pretrained=True)
-os.chdir(BASE_DIR)
 model.eval()
 model.to(device)
 print("[server] model ready")
 
-# ── load image database once at startup ──────────────────────
-with open(EMBEDDINGS_PATH, "r") as f:
+with open(EMBEDDINGS, "r") as f:
     database = json.load(f)
-db_vectors = np.array([entry["vector"] for entry in database])
-db_filenames = [entry["filename"] for entry in database]
-print(f"[server] database loaded — {len(database)} images")
 
-# ── routes ───────────────────────────────────────────────────
+db_vectors    = np.array([e["vector"] for e in database])
+db_filenames  = [e["filename"] for e in database]
+db_paths      = [e["path"] for e in database]
+db_categories = [e["category"] for e in database]
+
+category_indices = {}
+for i, cat in enumerate(db_categories):
+    category_indices.setdefault(cat, []).append(i)
+
+print(f"[server] {len(database)} images across {len(category_indices)} categories")
+
+def rank_normalize(similarities):
+    n = len(similarities)
+    ranks = np.argsort(np.argsort(similarities)).astype(float)
+    return ranks / (n - 1)
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "images": len(database)})
+    return jsonify({"status": "ok", "images": len(database), "categories": len(category_indices)})
 
 @app.route("/search", methods=["POST"])
 def search():
@@ -46,49 +54,69 @@ def search():
         return jsonify({"error": "no audio file"}), 400
 
     audio_file = request.files["audio"]
-
-    # save incoming audio chunk to a temp file
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         audio_file.save(tmp.name)
         tmp_path = tmp.name
 
     try:
-        # encode audio with ImageBind
         inputs = {
             ModalityType.AUDIO: data.load_and_transform_audio_data([tmp_path], device),
         }
         with torch.no_grad():
             embeddings = model(inputs)
 
-        audio_vector = embeddings[ModalityType.AUDIO].cpu().numpy()[0]
+        audio_vector  = embeddings[ModalityType.AUDIO].cpu().numpy()[0]
+        audio_norm    = np.linalg.norm(audio_vector)
+        db_norms      = np.linalg.norm(db_vectors, axis=1)
+        raw_sim       = (db_vectors @ audio_vector) / (db_norms * audio_norm)
 
-        # cosine similarity against every image in database
-        audio_norm = np.linalg.norm(audio_vector)
-        db_norms = np.linalg.norm(db_vectors, axis=1)
-        similarities = (db_vectors @ audio_vector) / (db_norms * audio_norm)
+        # rank normalize — histogram equalization on similarity scores
+        rank_scores   = rank_normalize(raw_sim)
 
-        # return top 5
-        top5_idx = np.argsort(similarities)[::-1][:5]
+        # category histogram — average rank score per category
+        category_scores = {}
+        for cat, indices in category_indices.items():
+            category_scores[cat] = float(np.mean(rank_scores[indices]))
+
+        winning_category = max(category_scores, key=category_scores.get)
+
+        # top 5 from winning category
+        winning_indices = category_indices[winning_category]
+        winning_scores  = [(i, float(rank_scores[i])) for i in winning_indices]
+        winning_scores.sort(key=lambda x: x[1], reverse=True)
+        top5 = winning_scores[:5]
+
         results = [
             {
-                "filename": db_filenames[i],
-                "score": float(similarities[i])
+                "filename":           db_filenames[i],
+                "category":           db_categories[i],
+                "path":               db_paths[i],
+                "raw_score":          float(raw_sim[i]),
+                "rank_score":         score,
+                "winning_category":   winning_category,
+                "category_confidence": category_scores[winning_category],
             }
-            for i in top5_idx
+            for i, score in top5
         ]
 
-        return jsonify({"matches": results})
+        cat_ranking = sorted(category_scores.items(), key=lambda x: x[1], reverse=True)
+
+        return jsonify({
+            "matches":          results,
+            "winning_category": winning_category,
+            "category_ranking": cat_ranking[:8],
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
     finally:
         os.unlink(tmp_path)
 
-@app.route("/image/<filename>")
-def serve_image(filename):
-    return send_from_directory(DATASET_DIR, filename)
+@app.route("/image/<path:filepath>")
+def serve_image(filepath):
+    directory = os.path.join(DATASET_DIR, os.path.dirname(filepath))
+    filename  = os.path.basename(filepath)
+    return send_from_directory(directory, filename)
 
-# ── run ──────────────────────────────────────────────────────
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=False)

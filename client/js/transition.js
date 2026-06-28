@@ -1,12 +1,13 @@
-// ── texture management and transition state ───────────────────────────────
-// depends on: gl.js (gl, U), config.js (CONFIG)
-
 let texA, texB;
-let progress     = 1.0;   // start at 1.0 so first image shows immediately
-let startTime    = null;
+let progress      = 1.0;
+let startTime     = null;
 let transitioning = false;
 
-// 1x1 black placeholder texture
+// background blur canvas — 2d mirror of current image
+const bgCanvas = document.getElementById('bgCanvas');
+const bgCtx    = bgCanvas.getContext('2d');
+let currentBgImg = null;
+
 function blackTex(){
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -15,7 +16,6 @@ function blackTex(){
   return tex;
 }
 
-// load an image URL into a WebGL texture
 function loadTexFromURL(url){
   return new Promise((res, rej) => {
     const img = new Image();
@@ -28,29 +28,31 @@ function loadTexFromURL(url){
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
-      res(tex);
+      res({tex, img});
     };
     img.onerror = rej;
     img.src = url;
   });
 }
 
-// call this whenever the server returns a new top match
 async function showImage(url){
   try {
-    const newTex = await loadTexFromURL(url);
-    // current B becomes new A — new image becomes B
+    const {tex, img} = await loadTexFromURL(url);
     texA = texB;
-    texB = newTex;
-    // restart transition from 0
-    progress = 0.0;
+    texB = tex;
+    progress      = 0.0;
     transitioning = true;
-  } catch(e) {
+
+    // update blurred background
+    bgCanvas.width  = bgCanvas.offsetWidth  || 1920;
+    bgCanvas.height = bgCanvas.offsetHeight || 1080;
+    bgCtx.drawImage(img, 0, 0, bgCanvas.width, bgCanvas.height);
+
+  } catch(e){
     console.error('failed to load image:', url, e);
   }
 }
 
-// render loop — called every frame
 function renderLoop(ts){
   if(!startTime) startTime = ts;
   const t = (ts - startTime) * 0.001;
@@ -73,7 +75,6 @@ function renderLoop(ts){
   requestAnimationFrame(renderLoop);
 }
 
-// initialise textures and start loop
 texA = blackTex();
 texB = blackTex();
 requestAnimationFrame(renderLoop);

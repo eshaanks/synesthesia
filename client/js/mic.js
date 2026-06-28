@@ -1,7 +1,5 @@
-// ── mic capture, chunking, server communication ───────────────────────────
-// depends on: config.js (CONFIG), transition.js (showImage)
-
-let stream, intervalId, recording = false;
+let stream, recording = false, intervalId;
+let lastBlob = null;
 
 async function toggleMic(){
   const btn = document.getElementById('btn');
@@ -11,7 +9,8 @@ async function toggleMic(){
       recording = true;
       btn.textContent = 'stop mic';
       btn.classList.add('active');
-      log('mic open — chunking every ' + CONFIG.CHUNK_MS + 'ms');
+      log('mic open');
+      initMicVisualizer(stream);
       startChunking();
     } catch(e) {
       log('mic denied: ' + e.message);
@@ -21,7 +20,8 @@ async function toggleMic(){
     btn.textContent = 'start mic';
     btn.classList.remove('active');
     clearInterval(intervalId);
-    stream.getTracks().forEach(t => t.stop());
+    stopMicVisualizer();
+    if(stream) stream.getTracks().forEach(t => t.stop());
     log('mic closed');
   }
 }
@@ -29,43 +29,63 @@ async function toggleMic(){
 function startChunking(){
   intervalId = setInterval(() => {
     if(!recording) return;
-
     const recorder = new MediaRecorder(stream);
     const chunks   = [];
-
-    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.ondataavailable = e => { if(e.data.size > 0) chunks.push(e.data); };
     recorder.onstop = async () => {
+      if(chunks.length === 0) return;
       const blob = new Blob(chunks, { type:'audio/webm' });
+      lastBlob   = blob;
       await sendChunk(blob);
     };
-
     recorder.start();
-    setTimeout(() => recorder.stop(), CONFIG.CHUNK_MS);
-  }, CONFIG.CHUNK_MS);
+    setTimeout(() => {
+      if(recorder.state === 'recording') recorder.stop();
+    }, CONFIG.CHUNK_MS);
+  }, CONFIG.CHUNK_MS + 200);
 }
 
 async function sendChunk(blob){
-  log('sending chunk...');
   const form = new FormData();
   form.append('audio', blob, 'chunk.webm');
 
   try {
     const res  = await fetch(`${CONFIG.SERVER}/search`, { method:'POST', body:form });
-    const data = await res.json();
+    const json = await res.json();
 
-    if(data.matches && data.matches.length > 0){
-      const top = data.matches[0];
-      // update UI
-      document.getElementById('score').textContent = top.score.toFixed(4);
-      document.getElementById('info').textContent  = top.filename;
-      log(`matched: ${top.filename} (${top.score.toFixed(4)})`);
-      // trigger WebGL transition
-      showImage(`${CONFIG.SERVER}/image/${top.filename}`);
-    } else {
-      log('no matches returned');
-    }
+    if(!json.matches || json.matches.length === 0) return;
+
+    const top = json.matches[0];
+
+    // ── pipeline logging ──────────────────────────────────────────────
+    console.group('── ImageBind pipeline ──');
+    console.log('raw score:',        top.raw_score);
+    console.log('rank score:',       top.rank_score);
+    console.log('winning category:', json.winning_category);
+    console.log('confidence:',       top.category_confidence);
+    console.group('category ranking:');
+    json.category_ranking.forEach(([cat, score], i) => {
+      console.log(`${i+1}. ${cat}: ${score.toFixed(6)}`);
+    });
+    console.groupEnd();
+    console.group('top matches:');
+    json.matches.forEach((m, i) => {
+      console.log(`${i+1}. ${m.filename} | raw: ${m.raw_score} | rank: ${m.rank_score}`);
+    });
+    console.groupEnd();
+    console.groupEnd();
+    // ─────────────────────────────────────────────────────────────────
+
+    document.getElementById('info').textContent  = json.winning_category;
+    document.getElementById('score').textContent = (top.category_confidence * 100).toFixed(1) + '%';
+    log(`→ ${json.winning_category} (${(top.category_confidence * 100).toFixed(1)}%)`);
+
+    showImage(`${CONFIG.SERVER}/image/${top.path}`);
+    if(lastBlob) playImageMemory(lastBlob);
+
   } catch(e) {
-    log('server error: ' + e.message);
+    log('error: ' + e.message);
+    console.error(e);
   }
 }
 
@@ -74,8 +94,7 @@ function log(msg){
   console.log(msg);
 }
 
-// check server health on load
 fetch(`${CONFIG.SERVER}/health`)
   .then(r  => r.json())
-  .then(d  => log(`server ready — ${d.images} images in database`))
+  .then(d  => log(`server ready — ${d.images} images, ${d.categories} categories`))
   .catch(() => log('server not reachable — start server.py first'));
