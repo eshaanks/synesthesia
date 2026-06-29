@@ -1,100 +1,100 @@
-let stream, recording = false, intervalId;
-let lastBlob = null;
+let stream, recording = false;
+let questionActive = false;
 
 async function toggleMic(){
-  const btn = document.getElementById('btn');
+  const btn = document.getElementById('micBtn');
   if(!recording){
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false });
       recording = true;
-      btn.textContent = 'stop mic';
+      btn.textContent = 'stop';
       btn.classList.add('active');
-      log('mic open');
-      initMicVisualizer(stream);
+      log('listening...');
+      initVisualizer(stream);
       startChunking();
-    } catch(e) {
+    } catch(e){
       log('mic denied: ' + e.message);
     }
   } else {
     recording = false;
-    btn.textContent = 'start mic';
+    btn.textContent = 'start';
     btn.classList.remove('active');
-    clearInterval(intervalId);
-    stopMicVisualizer();
+    stopVisualizer();
     if(stream) stream.getTracks().forEach(t => t.stop());
-    log('mic closed');
+    log('stopped');
   }
 }
 
 function startChunking(){
-  intervalId = setInterval(() => {
+  function recordAndSend(){
     if(!recording) return;
     const recorder = new MediaRecorder(stream);
     const chunks   = [];
     recorder.ondataavailable = e => { if(e.data.size > 0) chunks.push(e.data); };
     recorder.onstop = async () => {
-      if(chunks.length === 0) return;
-      const blob = new Blob(chunks, { type:'audio/webm' });
-      lastBlob   = blob;
-      await sendChunk(blob);
+      if(chunks.length > 0){
+        await sendChunk(new Blob(chunks, { type:'audio/webm' }));
+      }
+      if(recording) recordAndSend();
     };
     recorder.start();
     setTimeout(() => {
       if(recorder.state === 'recording') recorder.stop();
     }, CONFIG.CHUNK_MS);
-  }, CONFIG.CHUNK_MS + 200);
+  }
+  recordAndSend();
 }
 
 async function sendChunk(blob){
   const form = new FormData();
   form.append('audio', blob, 'chunk.webm');
-
   try {
     const res  = await fetch(`${CONFIG.SERVER}/search`, { method:'POST', body:form });
-    const json = await res.json();
+    const data = await res.json();
+    if(data.error){ log('server error: ' + data.error); return; }
 
-    if(!json.matches || json.matches.length === 0) return;
+    // update emotion targets — transition.js lerps these slowly
+    updateFromEmotion(data.valence, data.arousal, data.dominance);
 
-    const top = json.matches[0];
+    // show question if one isn't already on screen
+    if(!questionActive && data.question){
+      showQuestion(data.question);
+    }
 
-    // ── pipeline logging ──────────────────────────────────────────────
-    console.group('── ImageBind pipeline ──');
-    console.log('raw score:',        top.raw_score);
-    console.log('rank score:',       top.rank_score);
-    console.log('winning category:', json.winning_category);
-    console.log('confidence:',       top.category_confidence);
-    console.group('category ranking:');
-    json.category_ranking.forEach(([cat, score], i) => {
-      console.log(`${i+1}. ${cat}: ${score.toFixed(6)}`);
-    });
-    console.groupEnd();
-    console.group('top matches:');
-    json.matches.forEach((m, i) => {
-      console.log(`${i+1}. ${m.filename} | raw: ${m.raw_score} | rank: ${m.rank_score}`);
-    });
-    console.groupEnd();
-    console.groupEnd();
-    // ─────────────────────────────────────────────────────────────────
-
-    document.getElementById('info').textContent  = json.winning_category;
-    document.getElementById('score').textContent = (top.category_confidence * 100).toFixed(1) + '%';
-    log(`→ ${json.winning_category} (${(top.category_confidence * 100).toFixed(1)}%)`);
-
-    showImage(`${CONFIG.SERVER}/image/${top.path}`);
-    if(lastBlob) playImageMemory(lastBlob);
-
-  } catch(e) {
+    log(`${data.emotion_word} (v:${data.valence.toFixed(2)} a:${data.arousal.toFixed(2)})`);
+  } catch(e){
     log('error: ' + e.message);
-    console.error(e);
   }
 }
 
+function showQuestion(text){
+  const el = document.getElementById('question');
+  if(!el) return;
+  questionActive = true;
+
+  el.style.transition = 'none';
+  el.style.opacity    = '0';
+  el.textContent      = text;
+  el.offsetHeight;
+
+  setTimeout(() => {
+    el.style.transition = 'opacity 0.4s ease-in';
+    el.style.opacity    = '1';
+
+    setTimeout(() => {
+      el.style.transition = 'opacity 0.7s ease-out';
+      el.style.opacity    = '0';
+      setTimeout(() => { questionActive = false; }, 700);
+    }, 1500);
+  }, 400);
+}
+
 function log(msg){
-  document.getElementById('log').textContent = msg;
-  console.log(msg);
+  const el = document.getElementById('log');
+  if(el) el.textContent = msg;
 }
 
 fetch(`${CONFIG.SERVER}/health`)
   .then(r  => r.json())
-  .then(d  => log(`server ready — ${d.images} images, ${d.categories} categories`))
-  .catch(() => log('server not reachable — start server.py first'));
+  .then(() => log('ready'))
+  .catch(() => log('server not reachable'));

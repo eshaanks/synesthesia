@@ -1,141 +1,101 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
+*{ margin:0; padding:0; box-sizing:border-box; }
 
-body {
-  background: #000;
-  color: rgba(255,255,255,0.7);
-  font-family: sans-serif;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  overflow: hidden;
+body{
+  background:#000;
+  width:100vw;
+  height:100vh;
+  overflow:hidden;
+  font-family:sans-serif;
 }
 
-/* ── blurred background ─────────────────────────────────────────────── */
-#bg-blur {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
+#app{
+  position:relative;
+  width:100vw;
+  height:100vh;
 }
 
-#bgCanvas {
-  width: 100%;
-  height: 100%;
-  filter: blur(40px) brightness(0.35) saturate(1.4);
-  transform: scale(1.1);
+#glCanvas{
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  display:block;
+  z-index:1;
 }
 
-/* ── main app ───────────────────────────────────────────────────────── */
-#app {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  width: 900px;
+#question-wrap{
+  position:absolute;
+  bottom:120px;
+  left:0; right:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none;
+  z-index:3;
 }
 
-#display {
-  width: 900px;
-  height: 560px;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 8px 60px rgba(0,0,0,0.7);
-  border: 0.5px solid rgba(255,255,255,0.06);
+#question{
+  font-size:clamp(16px,2.2vw,28px);
+  font-weight:300;
+  color:rgba(255,255,255,0.88);
+  letter-spacing:.08em;
+  text-align:center;
+  opacity:0;
+  transition:none;
+  text-shadow:0 2px 24px rgba(0,0,0,0.95), 0 0 60px rgba(0,0,0,0.7);
+  max-width:60vw;
+  line-height:1.6;
 }
 
-#glCanvas {
-  width: 100%;
-  height: 100%;
-  display: block;
+#viz-wrap{
+  position:absolute;
+  bottom:56px;
+  left:0; right:0;
+  height:44px;
+  z-index:3;
+  overflow:hidden;
 }
 
-/* ── visualizers ────────────────────────────────────────────────────── */
-#visualizers {
-  width: 900px;
-  height: 80px;
-  display: flex;
-  background: rgba(10,10,10,0.6);
-  backdrop-filter: blur(12px);
-  border: 0.5px solid rgba(255,255,255,0.06);
-  border-radius: 8px;
-  overflow: hidden;
+#vizCanvas{
+  width:100%;
+  height:100%;
+  display:block;
 }
 
-.viz-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 10px 4px;
-  gap: 3px;
+#controls{
+  position:absolute;
+  bottom:14px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:4;
 }
 
-.viz-divider {
-  width: 0.5px;
-  background: rgba(255,255,255,0.06);
-  margin: 10px 0;
+button{
+  padding:8px 28px;
+  background:rgba(0,0,0,0.5);
+  border:0.5px solid rgba(255,255,255,0.2);
+  color:rgba(255,255,255,0.5);
+  font-size:11px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  cursor:pointer;
+  border-radius:4px;
+  font-family:sans-serif;
+  backdrop-filter:blur(8px);
+  transition:border-color .2s, color .2s;
 }
 
-.viz-label {
-  font-size: 9px;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.18);
-}
+button:hover  { border-color:rgba(255,255,255,0.5); color:#fff; }
+button.active { border-color:#ff3b3b; color:#ff3b3b; }
 
-#micCanvas, #playbackCanvas {
-  width: 100%;
-  height: 52px;
-  display: block;
-}
-
-/* ── hud ────────────────────────────────────────────────────────────── */
-#hud {
-  width: 900px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 4px;
-}
-
-#info {
-  font-size: 11px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.2);
-}
-
-#score {
-  font-size: 16px;
-  font-weight: 300;
-  color: rgba(255,255,255,0.35);
-}
-
-button {
-  padding: 8px 28px;
-  background: rgba(255,255,255,0.04);
-  border: 0.5px solid rgba(255,255,255,0.2);
-  color: rgba(255,255,255,0.6);
-  font-size: 11px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  cursor: pointer;
-  border-radius: 4px;
-  font-family: sans-serif;
-  backdrop-filter: blur(8px);
-  transition: border-color 0.2s, color 0.2s;
-}
-
-button:hover { border-color: rgba(255,255,255,0.4); color: #fff; }
-button.active { border-color: #ff3b3b; color: #ff3b3b; }
-
-#log {
-  font-size: 10px;
-  color: rgba(255,255,255,0.15);
-  letter-spacing: .06em;
-  text-align: center;
+#log{
+  position:absolute;
+  bottom:2px;
+  left:50%;
+  transform:translateX(-50%);
+  font-size:10px;
+  color:rgba(255,255,255,0.15);
+  letter-spacing:.08em;
+  z-index:4;
+  white-space:nowrap;
 }

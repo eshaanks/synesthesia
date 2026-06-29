@@ -5,34 +5,21 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-
-  <div id="bg-blur">
-    <canvas id="bgCanvas"></canvas>
-  </div>
-
   <div id="app">
-    <div id="display">
-      <canvas id="glCanvas" width="900" height="560"></canvas>
+    <canvas id="glCanvas"></canvas>
+
+    <div id="question-wrap">
+      <div id="question"></div>
     </div>
 
-    <div id="visualizers">
-      <div class="viz-panel">
-        <canvas id="micCanvas" width="440" height="60"></canvas>
-        <div class="viz-label">mic input</div>
-      </div>
-      <div class="viz-divider"></div>
-      <div class="viz-panel">
-        <canvas id="playbackCanvas" width="440" height="60"></canvas>
-        <div class="viz-label">image memory</div>
-      </div>
+    <div id="viz-wrap">
+      <canvas id="vizCanvas"></canvas>
     </div>
 
-    <div id="hud">
-      <div id="info">—</div>
-      <div id="score">—</div>
+    <div id="controls">
+      <button id="micBtn" onclick="toggleMic()">start</button>
     </div>
 
-    <button id="btn" onclick="toggleMic()">start mic</button>
     <div id="log">waiting...</div>
   </div>
 
@@ -41,6 +28,5 @@
   <script src="js/transition.js"></script>
   <script src="js/visualizer.js"></script>
   <script src="js/mic.js"></script>
-
 </body>
 </html>
