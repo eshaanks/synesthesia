@@ -164,7 +164,7 @@
     // sensible defaults
     gfxManual.colorTemp  = 0.5;
     gfxManual.speed      = 0.25;  // unlocked default: feeds 0-1 path → *4.0 = 1.0 GPU speed
-    gfxManual.blobSize   = 2.5;
+    gfxManual.blobSize   = 0.33;  // unlocked default: 0-1 path → 0.8 + 0.33*4.2 ≈ 2.2 GPU
     gfxManual.fog        = 0.0;
     gfxManual.saturation = 1.0;
     gfxManual.volume     = 0.2;
@@ -356,17 +356,25 @@
         delete _scalarMoodAccum[k];
       });
 
-      // write to moodTarget — locked params use slider value directly (already in GPU range)
-      // unlocked params come from 0-1 routing signals so need scaling
-      moodTarget.colorTemp  = gfxLock.colorTemp  ? gfxManual.colorTemp              : mood.colorTemp;
-      moodTarget.speed      = gfxLock.speed      ? gfxManual.speed                  : mood.speed * 4.0;
-      moodTarget.blobSize   = gfxLock.blobSize   ? gfxManual.blobSize               : 0.8 + mood.blobSize * 4.2;
-      moodTarget.fog        = gfxLock.fog        ? gfxManual.fog                    : mood.fog;
-      moodTarget.saturation = gfxLock.saturation ? gfxManual.saturation             : mood.saturation;
+      // unlocked params: scale 0-1 routing signal to GPU range, write to moodTarget (lerped)
+      if(!gfxLock.colorTemp)  moodTarget.colorTemp  = mood.colorTemp;
+      if(!gfxLock.speed)      moodTarget.speed      = mood.speed * 4.0;
+      if(!gfxLock.blobSize)   moodTarget.blobSize   = 0.8 + mood.blobSize * 4.2;
+      if(!gfxLock.fog)        moodTarget.fog        = mood.fog;
+      if(!gfxLock.saturation) moodTarget.saturation = mood.saturation;
 
-      // handle locked shape params: write directly to fftTarget
+      // locked params: write slider value directly to BOTH target AND current — instant, no lerp lag
+      if(gfxLock.colorTemp)  { moodTarget.colorTemp  = moodCurrent.colorTemp  = gfxManual.colorTemp;  }
+      if(gfxLock.speed)      { moodTarget.speed      = moodCurrent.speed      = gfxManual.speed;      }
+      if(gfxLock.blobSize)   { moodTarget.blobSize   = moodCurrent.blobSize   = gfxManual.blobSize;   }
+      if(gfxLock.fog)        { moodTarget.fog        = moodCurrent.fog        = gfxManual.fog;        }
+      if(gfxLock.saturation) { moodTarget.saturation = moodCurrent.saturation = gfxManual.saturation; }
+
+      // locked shape params: same — bypass lerp entirely
       SHAPE_KEYS_SET.forEach(k => {
-        if(gfxLock[k] && typeof fftTarget !== 'undefined') fftTarget[k] = gfxManual[k];
+        if(gfxLock[k] && typeof fftTarget !== 'undefined'){
+          fftTarget[k] = fftCurrent[k] = gfxManual[k];
+        }
       });
     }
     window._globalTick = pushMoodUniforms;
