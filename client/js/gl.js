@@ -81,18 +81,18 @@ float vnoise(vec2 p){
     u.y);
 }
 
-// 5-octave domain-warped noise — warp depth driven by bass, mutation by flux
+// domain-warped noise — warp depth driven by bass, mutation by flux
 float inkNoise(vec2 p, float warpDepth, float mutRate){
-  float t  = u_time * u_speed * (0.04 + mutRate * 0.12);
+  float t  = u_time * u_speed * (0.02 + mutRate * 0.5);
   vec2  q  = vec2(vnoise(p + vec2(0.0, 0.0) + t),
                   vnoise(p + vec2(5.2, 1.3) + t));
   vec2  r  = vec2(vnoise(p + warpDepth * q + vec2(1.7, 9.2) + t * 0.7),
                   vnoise(p + warpDepth * q + vec2(8.3, 2.8) + t * 0.5));
   vec2  s  = vec2(vnoise(p + warpDepth * r + vec2(0.3, 5.1) + t * 0.3),
                   vnoise(p + warpDepth * r + vec2(4.1, 3.7) + t * 0.3));
-  // extra octave for edge detail — driven by texture (ZCR)
-  float detail = vnoise(p * 3.5 + s * u_texture * 2.0 + t * 0.2) * 0.2;
-  return vnoise(p + 3.0*q + 2.0*r + s) + detail;
+  // texture adds high-freq grain — visible range 0.0 (smooth) to 1.0 (coarse)
+  float detail = vnoise(p * 6.0 + s * 1.5 + t * 0.4) * u_texture;
+  return vnoise(p + 3.0*q + 2.0*r + s) + detail * 0.35;
 }
 
 // cosine palette — phase driven by valence-mapped hue
@@ -108,11 +108,11 @@ void main(){
   vec2 uv  = v_uv - 0.5;
   uv.x    *= aspect;
 
-  // brightness shifts centre-of-mass vertically
-  uv.y += (u_brightness - 0.5) * 0.22;
+  // brightness shifts centre-of-mass vertically — full 0-1 sweeps half the canvas height
+  uv.y += (u_brightness - 0.5) * 0.9;
 
-  // spread: squeezes or splays the x-axis — open/wide vs closed/narrow
-  uv.x *= 0.6 + u_spread * 1.2;
+  // spread: squeezes or splays the x-axis — 0=needle-thin, 1=very wide
+  uv.x *= 0.2 + u_spread * 2.2;
 
   // ── bilateral symmetry ────────────────────────────────────────────────────
   vec2 uvL = vec2(-abs(uv.x), uv.y);
@@ -122,22 +122,24 @@ void main(){
   vec2 pL = uvL * baseScale;
   vec2 pR = uvR * baseScale;
 
-  // warp depth driven purely by bass audio signal
-  float warpDepth = 1.5 + u_bass * 4.0;
+  // warp depth — 0=almost no warp (clean geometric), 1=heavily folded organic mess
+  float warpDepth = 0.3 + u_bass * 9.0;
 
   float inkL = inkNoise(pL, warpDepth, u_movement);
   float inkR = inkNoise(pR, warpDepth, u_movement);
 
-  // tone: singing voice = tighter threshold (structured), noise = loose (organic)
-  float thresh = 0.50 - mix(-0.04, 0.06, u_tone);
-  float bodyL  = smoothstep(thresh + 0.07, thresh - 0.07, inkL);
-  float bodyR  = smoothstep(thresh + 0.07, thresh - 0.07, inkR);
+  // tone: 0=tight crisp edge (structured), 1=dissolved filamentous (noisy/organic)
+  // threshold shift spreads the shape from compact blob → diffuse cloud
+  float thresh = 0.62 - u_tone * 0.30;
+  float edge   = 0.02 + u_tone * 0.12;
+  float bodyL  = smoothstep(thresh + edge, thresh - edge, inkL);
+  float bodyR  = smoothstep(thresh + edge, thresh - edge, inkR);
 
-  // satellite lobes
+  // satellite lobes — threshold uses same tone-driven thresh so they dissolve together
   vec2 pL2 = uvL * baseScale * 1.8 + vec2(2.3, 4.1);
   vec2 pR2 = uvR * baseScale * 1.8 + vec2(2.3, 4.1);
-  float lobesL = smoothstep(0.58, 0.50, inkNoise(pL2, warpDepth*0.6, u_movement*0.5)) * 0.65;
-  float lobesR = smoothstep(0.58, 0.50, inkNoise(pR2, warpDepth*0.6, u_movement*0.5)) * 0.65;
+  float lobesL = smoothstep(thresh + edge, thresh - edge, inkNoise(pL2, warpDepth*0.6, u_movement*0.5)) * 0.65;
+  float lobesR = smoothstep(thresh + edge, thresh - edge, inkNoise(pR2, warpDepth*0.6, u_movement*0.5)) * 0.65;
 
   float shape = clamp(bodyL + lobesL, 0.0, 1.0);
   float ink   = inkL;
@@ -162,8 +164,8 @@ void main(){
   float luma   = dot(inkHue, vec3(0.299, 0.587, 0.114));
   inkHue       = mix(vec3(luma), inkHue, u_saturation);
 
-  // volume pulses brightness
-  float bright = 0.85 + u_volume * 0.35;
+  // volume: 0=dark/dim, 1=fully blown out bright
+  float bright = 0.3 + u_volume * 1.8;
   inkHue      *= bright;
 
   // ── vignette ──────────────────────────────────────────────────────────────
@@ -171,12 +173,14 @@ void main(){
   float vig = 1.0 - r2 * 0.6;
   inkHue   *= clamp(vig, 0.0, 1.0);
 
-  // ── fog — radial mist, thickens from edges inward proportional to u_fog ───
-  // adds a soft milky bloom at the perimeter, not a flat overlay
-  float fogVig   = smoothstep(0.0, 1.4, sqrt(r2));           // 0 at centre, 1 at edge
-  float fogAmt   = fogVig * fogVig * u_fog;                   // quadratic rolloff
-  vec3  fogColor = vec3(0.88, 0.90, 0.95);
-  inkHue = mix(inkHue, fogColor, clamp(fogAmt, 0.0, 0.85));
+  // ── fog — milky diffusion that eats inward from all edges as u_fog rises ───
+  // at fog=0: no effect. at fog=0.5: edges haze. at fog=1: whole canvas milky.
+  float dist     = sqrt(r2);
+  float fogVig   = smoothstep(0.0, 0.55, dist);   // starts from 0 at centre
+  float fogFlat  = u_fog * 0.55;                   // flat fill that rises across whole canvas
+  float fogAmt   = mix(fogVig * u_fog, fogFlat + fogVig * (1.0 - fogFlat), u_fog);
+  vec3  fogColor = vec3(0.90, 0.91, 0.95);
+  inkHue = mix(inkHue, fogColor, clamp(fogAmt, 0.0, 0.95));
 
   gl_FragColor = vec4(inkHue, 1.0);
 }`;

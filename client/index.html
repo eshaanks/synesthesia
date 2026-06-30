@@ -137,20 +137,20 @@
   <script>
     // ── all graphical parameters with their slider ranges and GPU scale fns ──
     const GFX_PARAMS = [
-      // shape uniforms — fftTarget/fftCurrent, raw 0-1
-      { key:'volume',     label:'Glow',           desc:'brightness pulse',        pool:'shape', min:0,    max:1,    step:0.01, toGpu: v=>v,              fromGpu: v=>v    },
-      { key:'brightness', label:'Vertical Shift', desc:'spectral centroid',       pool:'shape', min:0,    max:1,    step:0.01, toGpu: v=>v,              fromGpu: v=>v    },
-      { key:'tone',       label:'Edge Structure', desc:'tonal vs noise',          pool:'shape', min:0,    max:1,    step:0.01, toGpu: v=>v,              fromGpu: v=>v    },
-      { key:'movement',   label:'Mutation Speed', desc:'frame-to-frame flux',     pool:'shape', min:0,    max:1,    step:0.01, toGpu: v=>v,              fromGpu: v=>v    },
-      { key:'texture',    label:'Edge Sharpness', desc:'zero crossing rate',      pool:'shape', min:0,    max:1,    step:0.01, toGpu: v=>v,              fromGpu: v=>v    },
-      { key:'bass',       label:'Warp Depth',     desc:'low-end energy',          pool:'shape', min:0,    max:1,    step:0.01, toGpu: v=>v,              fromGpu: v=>v    },
-      { key:'spread',     label:'Arm Openness',   desc:'high-freq presence',      pool:'shape', min:0,    max:1,    step:0.01, toGpu: v=>v,              fromGpu: v=>v    },
-      // mood uniforms — moodTarget/moodCurrent, scaled ranges
-      { key:'colorTemp',  label:'Colour Temp',    desc:'cold blue to warm gold',  pool:'mood',  min:0,    max:1,    step:0.01, toGpu: v=>v,              fromGpu: v=>v    },
-      { key:'speed',      label:'Flow Speed',     desc:'animation ebb rate',      pool:'mood',  min:0,    max:4,    step:0.01, toGpu: v=>v,              fromGpu: v=>v    },
-      { key:'blobSize',   label:'Blob Size',      desc:'zoom / scale',            pool:'mood',  min:0.1,  max:12.0, step:0.05, toGpu: v=>v,              fromGpu: v=>v    },
-      { key:'fog',        label:'Fog',            desc:'radial mist vignette',    pool:'mood',  min:0,    max:1,    step:0.01, toGpu: v=>v,              fromGpu: v=>v    },
-      { key:'saturation', label:'Saturation',     desc:'greyscale to vivid',      pool:'mood',  min:0,    max:1,    step:0.01, toGpu: v=>v,              fromGpu: v=>v    },
+      // shape uniforms — all 0-1, shader uses full range
+      { key:'volume',     label:'Glow',           desc:'0=dark/dim  1=blown out bright',   pool:'shape', min:0,   max:1,    step:0.01 },
+      { key:'brightness', label:'Vertical Shift', desc:'0=bottom  0.5=centre  1=top',      pool:'shape', min:0,   max:1,    step:0.01 },
+      { key:'tone',       label:'Edge Dissolve',  desc:'0=crisp blob  1=diffuse cloud',    pool:'shape', min:0,   max:1,    step:0.01 },
+      { key:'movement',   label:'Mutation Speed', desc:'0=frozen  1=rapidly morphing',     pool:'shape', min:0,   max:1,    step:0.01 },
+      { key:'texture',    label:'Surface Grain',  desc:'0=smooth  1=coarse / noisy skin',  pool:'shape', min:0,   max:1,    step:0.01 },
+      { key:'bass',       label:'Warp Depth',     desc:'0=clean shape  1=folded chaos',    pool:'shape', min:0,   max:1,    step:0.01 },
+      { key:'spread',     label:'Arm Width',      desc:'0=needle-thin  1=very wide open',  pool:'shape', min:0,   max:1,    step:0.01 },
+      // mood uniforms — written directly to moodTarget when locked
+      { key:'colorTemp',  label:'Colour Temp',    desc:'0=cold blue  1=warm gold',         pool:'mood',  min:0,   max:1,    step:0.01 },
+      { key:'speed',      label:'Flow Speed',     desc:'0=frozen  4=fast ebb',             pool:'mood',  min:0,   max:4,    step:0.05 },
+      { key:'blobSize',   label:'Blob Size',      desc:'0.1=tiny forms  12=fill frame',    pool:'mood',  min:0.1, max:12.0, step:0.05 },
+      { key:'fog',        label:'Fog',            desc:'0=clear  1=whole canvas milky',    pool:'mood',  min:0,   max:1,    step:0.01 },
+      { key:'saturation', label:'Saturation',     desc:'0=greyscale  1=full colour',       pool:'mood',  min:0,   max:1,    step:0.01 },
     ];
 
     // which keys go where
