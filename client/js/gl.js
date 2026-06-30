@@ -160,11 +160,7 @@ void main(){
   vec3  inkHue = cosPalette(ink, hue) * shape * 1.2;
   inkHue      += cosPalette(ink, hue + 60.0) * (lobesL + lobesR) * 0.5;
 
-  // saturation — lerp toward luminance for greyscale
-  float luma   = dot(inkHue, vec3(0.299, 0.587, 0.114));
-  inkHue       = mix(vec3(luma), inkHue, u_saturation);
-
-  // volume: 0=dark/dim, 1=fully blown out bright
+  // volume: 0=dark/dim, 1=blown out bright
   float bright = 0.3 + u_volume * 1.8;
   inkHue      *= bright;
 
@@ -173,14 +169,18 @@ void main(){
   float vig = 1.0 - r2 * 0.6;
   inkHue   *= clamp(vig, 0.0, 1.0);
 
-  // ── fog — milky diffusion that eats inward from all edges as u_fog rises ───
-  // at fog=0: no effect. at fog=0.5: edges haze. at fog=1: whole canvas milky.
-  float dist     = sqrt(r2);
-  float fogVig   = smoothstep(0.0, 0.55, dist);   // starts from 0 at centre
-  float fogFlat  = u_fog * 0.55;                   // flat fill that rises across whole canvas
-  float fogAmt   = mix(fogVig * u_fog, fogFlat + fogVig * (1.0 - fogFlat), u_fog);
-  vec3  fogColor = vec3(0.90, 0.91, 0.95);
-  inkHue = mix(inkHue, fogColor, clamp(fogAmt, 0.0, 0.95));
+  // ── saturation — applied after vignette so it acts on the full rendered image
+  // 0=greyscale (full desaturate), 1=vivid colour
+  float luma = dot(inkHue, vec3(0.299, 0.587, 0.114));
+  inkHue     = mix(vec3(luma), inkHue, u_saturation);
+
+  // ── fog — milky white mist over the whole canvas, stronger at edges ───────
+  // u_fog=0: clear. u_fog=0.5: noticeable edge haze. u_fog=1: canvas washed out.
+  float dist    = sqrt(r2);
+  float radial  = smoothstep(0.0, 0.7, dist);          // 0 at centre → 1 at edge
+  float fogAmt  = u_fog * (0.45 + radial * 0.55);      // flat base + radial boost
+  vec3  fogCol  = vec3(0.90, 0.91, 0.96);
+  inkHue = mix(inkHue, fogCol, clamp(fogAmt, 0.0, 0.97));
 
   gl_FragColor = vec4(inkHue, 1.0);
 }`;
