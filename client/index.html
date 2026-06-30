@@ -163,7 +163,7 @@
     GFX_PARAMS.forEach(p => { gfxLock[p.key] = false; gfxManual[p.key] = (p.min + p.max) / 2; });
     // sensible defaults
     gfxManual.colorTemp  = 0.5;
-    gfxManual.speed      = 1.0;
+    gfxManual.speed      = 0.25;  // unlocked default: feeds 0-1 path → *4.0 = 1.0 GPU speed
     gfxManual.blobSize   = 2.5;
     gfxManual.fog        = 0.0;
     gfxManual.saturation = 1.0;
@@ -356,12 +356,13 @@
         delete _scalarMoodAccum[k];
       });
 
-      // write to moodTarget with GPU scaling
-      moodTarget.colorTemp  = mood.colorTemp;
-      moodTarget.speed      = mood.speed * 4.0;
-      moodTarget.blobSize   = 0.8 + mood.blobSize * 4.2;
-      moodTarget.fog        = mood.fog;
-      moodTarget.saturation = mood.saturation;
+      // write to moodTarget — locked params use slider value directly (already in GPU range)
+      // unlocked params come from 0-1 routing signals so need scaling
+      moodTarget.colorTemp  = gfxLock.colorTemp  ? gfxManual.colorTemp              : mood.colorTemp;
+      moodTarget.speed      = gfxLock.speed      ? gfxManual.speed                  : mood.speed * 4.0;
+      moodTarget.blobSize   = gfxLock.blobSize   ? gfxManual.blobSize               : 0.8 + mood.blobSize * 4.2;
+      moodTarget.fog        = gfxLock.fog        ? gfxManual.fog                    : mood.fog;
+      moodTarget.saturation = gfxLock.saturation ? gfxManual.saturation             : mood.saturation;
 
       // handle locked shape params: write directly to fftTarget
       SHAPE_KEYS_SET.forEach(k => {
