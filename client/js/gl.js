@@ -97,54 +97,37 @@ float inkNoise(vec2 p, float warpDepth, float mutRate){
   return vnoise(p + 3.0*q + 2.0*r + s) + detail * 0.35;
 }
 
-// cosine palette — a,b,c,d are the standard IQ form
-// col = a + b*cos(2pi*(c*t+d))
-vec3 cosPal(float t, vec3 a, vec3 b, vec3 c, vec3 d){
-  return clamp(a + b * cos(6.28318 * (c * t + d)), 0.0, 1.0);
+// ── per-emotion base colours ───────────────────────────────────────────────────
+// Returns a fixed RGB colour for each emotion.
+// The noise field (ink) is used ONLY for brightness modulation, not hue,
+// so the whole blob stays one coherent colour per emotion.
+
+// ANGER — deep crimson-red with orange ember highlights
+vec3 palAnger(float brightness){
+  vec3 shadow    = vec3(0.55, 0.04, 0.02);  // dark crimson
+  vec3 highlight = vec3(1.00, 0.35, 0.05);  // hot orange-red
+  return mix(shadow, highlight, brightness);
 }
 
-// ── per-emotion palettes ──────────────────────────────────────────────────────
-// Each palette sweeps through its colour territory as t goes 0→1
-// t comes from the noise field value so you see the full range across the blob
-
-// ANGER — saturated crimson → hot orange → ember gold. No blue/green.
-vec3 palAnger(float t){
-  return cosPal(t,
-    vec3(0.80, 0.25, 0.05),   // bias: strong red-orange base
-    vec3(0.20, 0.25, 0.05),   // amplitude
-    vec3(0.50, 0.70, 1.00),
-    vec3(0.00, 0.10, 0.50)    // phase: stays in red-orange-gold band
-  );
+// SADNESS — cold dark slate to grey-blue. Muted, desaturated.
+vec3 palSad(float brightness){
+  vec3 shadow    = vec3(0.05, 0.07, 0.15);  // near-black cold indigo
+  vec3 highlight = vec3(0.35, 0.42, 0.60);  // grey-blue slate
+  return mix(shadow, highlight, brightness * 0.7); // cap brightness — stays dark
 }
 
-// SADNESS — cold slate → dark indigo → grey-blue. Desaturated, low brightness.
-vec3 palSad(float t){
-  return cosPal(t,
-    vec3(0.20, 0.23, 0.35),   // bias: mid dark blue-grey
-    vec3(0.12, 0.10, 0.18),   // low amplitude — muted, desaturated
-    vec3(0.60, 0.70, 0.50),
-    vec3(0.55, 0.62, 0.68)    // phase: locks in cool slate-indigo
-  );
+// HAPPY — warm golden yellow to bright coral/peach
+vec3 palHappy(float brightness){
+  vec3 shadow    = vec3(0.55, 0.35, 0.05);  // amber-gold
+  vec3 highlight = vec3(1.00, 0.90, 0.40);  // bright sunny yellow
+  return mix(shadow, highlight, brightness);
 }
 
-// HAPPY — bright yellow → warm coral → sky cyan → mint. Full vibrancy.
-vec3 palHappy(float t){
-  return cosPal(t,
-    vec3(0.72, 0.68, 0.52),   // bias: bright warm base
-    vec3(0.28, 0.28, 0.28),   // amplitude — wide colour swing
-    vec3(1.00, 0.80, 0.60),
-    vec3(0.00, 0.10, 0.35)    // phase: yellow → coral → cyan sweep
-  );
-}
-
-// NEUTRAL — soft warm-white to pale lavender. Quiet, unobtrusive.
-vec3 palNeutral(float t){
-  return cosPal(t,
-    vec3(0.58, 0.56, 0.60),   // bias: near-white mid-grey
-    vec3(0.18, 0.16, 0.22),   // gentle swing
-    vec3(0.80, 0.90, 0.70),
-    vec3(0.20, 0.25, 0.50)    // phase: warm white → pale lavender
-  );
+// NEUTRAL — soft warm white to pale grey-violet. Unobtrusive.
+vec3 palNeutral(float brightness){
+  vec3 shadow    = vec3(0.20, 0.18, 0.25);  // dark muted violet-grey
+  vec3 highlight = vec3(0.75, 0.73, 0.82);  // pale lavender-white
+  return mix(shadow, highlight, brightness);
 }
 
 void main(){
@@ -201,27 +184,24 @@ void main(){
   float spec   = pow(max(dot(nrm, ldir), 0.0), 20.0);
   float gloss  = spec * (1.0 - clamp(abs(ink-thresh)/0.07*0.8,0.0,1.0)) * shape * 0.5;
 
-  // ── colour — blended from per-emotion palettes ────────────────────────────
-  // each palette is sampled at the same noise value so texture is preserved
-  // weights are the smoothed emotion probs — they sum to ~1 so blend is stable
-  vec3 cAng  = palAnger (ink);
-  vec3 cSad  = palSad   (ink);
-  vec3 cHap  = palHappy (ink);
-  vec3 cNeu  = palNeutral(ink);
+  // ── colour — emotion-driven ───────────────────────────────────────────────
+  // ink drives brightness within each palette (shadow→highlight),
+  // NOT hue — so the whole blob stays one coherent colour per emotion.
+  float bri = clamp(ink * 1.4 - 0.1, 0.0, 1.0);
 
-  // weighted blend — emotion probs drive hue in real time
-  vec3 blended = cAng  * u_ang
-               + cSad  * u_sad
-               + cHap  * u_hap
-               + cNeu  * u_neu;
+  vec3 cAng = palAnger  (bri);
+  vec3 cSad = palSad    (bri);
+  vec3 cHap = palHappy  (bri);
+  vec3 cNeu = palNeutral(bri);
 
-  // u_colorTemp nudges the blend slightly warm or cool on top of emotion colour
-  // (keeps the manual colorTemp knob useful as a fine-tune)
-  blended = mix(blended, blended * vec3(0.85, 0.90, 1.10), (1.0 - u_colorTemp) * 0.3);
-  blended = mix(blended, blended * vec3(1.10, 1.00, 0.80), u_colorTemp * 0.3);
+  // blend by smoothed emotion probs — the dominant emotion owns the hue
+  vec3 blended = cAng * u_ang
+               + cSad * u_sad
+               + cHap * u_hap
+               + cNeu * u_neu;
 
-  vec3  inkHue = blended * shape * 1.2;
-  inkHue      += blended * 0.6 * (lobesL + lobesR) * 0.5;
+  vec3  inkHue = blended * shape * 1.3;
+  inkHue      += blended * 0.5 * (lobesL + lobesR) * 0.5;
 
   // volume: 0=dark/dim, 1=blown out bright
   float bright = 0.3 + u_volume * 1.8;
