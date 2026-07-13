@@ -14,7 +14,7 @@ window.moodTarget  = { colorTemp:0.5, speed:1.0, blobSize:2.2, fog:0.0, saturati
 window.moodCurrent = { colorTemp:0.5, speed:1.0, blobSize:2.2, fog:0.0, saturation:1.0 };
 
 // lerp speeds
-let EMOTION_SPEED = 0.008;
+let EMOTION_SPEED = 0.06;
 let FFT_LERP      = 0.12;
 let MOOD_LERP     = 0.02;
 

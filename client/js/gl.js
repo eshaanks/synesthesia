@@ -104,43 +104,46 @@ vec3 cosPal(float t, vec3 a, vec3 b, vec3 c, vec3 d){
 }
 
 // ── per-emotion palettes ──────────────────────────────────────────────────────
-// ANGER — reds, deep oranges, hot embers. No cool tones.
+// Each palette sweeps through its colour territory as t goes 0→1
+// t comes from the noise field value so you see the full range across the blob
+
+// ANGER — saturated crimson → hot orange → ember gold. No blue/green.
 vec3 palAnger(float t){
   return cosPal(t,
-    vec3(0.55, 0.15, 0.05),   // bias: deep red-orange base
-    vec3(0.45, 0.15, 0.05),   // amplitude
-    vec3(0.80, 1.00, 1.20),   // frequency
-    vec3(0.00, 0.25, 0.50)    // phase: locks hue in red-orange band
+    vec3(0.80, 0.25, 0.05),   // bias: strong red-orange base
+    vec3(0.20, 0.25, 0.05),   // amplitude
+    vec3(0.50, 0.70, 1.00),
+    vec3(0.00, 0.10, 0.50)    // phase: stays in red-orange-gold band
   );
 }
 
-// SADNESS — desaturated blue-grey, slate, cold dark indigo. No warm tones.
+// SADNESS — cold slate → dark indigo → grey-blue. Desaturated, low brightness.
 vec3 palSad(float t){
   return cosPal(t,
-    vec3(0.12, 0.14, 0.22),   // bias: dark blue-grey base
-    vec3(0.10, 0.10, 0.18),   // low amplitude — stays muted
+    vec3(0.20, 0.23, 0.35),   // bias: mid dark blue-grey
+    vec3(0.12, 0.10, 0.18),   // low amplitude — muted, desaturated
     vec3(0.60, 0.70, 0.50),
-    vec3(0.55, 0.60, 0.65)    // phase: locks in cool blue-slate
+    vec3(0.55, 0.62, 0.68)    // phase: locks in cool slate-indigo
   );
 }
 
-// HAPPY — bright warm yellows, coral, sky blue, mint. Full vibrancy.
+// HAPPY — bright yellow → warm coral → sky cyan → mint. Full vibrancy.
 vec3 palHappy(float t){
   return cosPal(t,
-    vec3(0.65, 0.60, 0.45),   // bias: warm bright base
-    vec3(0.35, 0.35, 0.35),   // high amplitude — lots of colour swing
+    vec3(0.72, 0.68, 0.52),   // bias: bright warm base
+    vec3(0.28, 0.28, 0.28),   // amplitude — wide colour swing
     vec3(1.00, 0.80, 0.60),
-    vec3(0.00, 0.15, 0.40)    // phase: sweeps yellow → coral → sky
+    vec3(0.00, 0.10, 0.35)    // phase: yellow → coral → cyan sweep
   );
 }
 
-// NEUTRAL — balanced mid-tones, soft lavender to warm white. Unobtrusive.
+// NEUTRAL — soft warm-white to pale lavender. Quiet, unobtrusive.
 vec3 palNeutral(float t){
   return cosPal(t,
-    vec3(0.40, 0.38, 0.42),
-    vec3(0.22, 0.20, 0.25),
+    vec3(0.58, 0.56, 0.60),   // bias: near-white mid-grey
+    vec3(0.18, 0.16, 0.22),   // gentle swing
     vec3(0.80, 0.90, 0.70),
-    vec3(0.30, 0.35, 0.60)
+    vec3(0.20, 0.25, 0.50)    // phase: warm white → pale lavender
   );
 }
 
