@@ -53,10 +53,14 @@ async function sendChunk(blob){
     const data = await res.json();
     if(data.error){ log('server error: ' + data.error); return; }
 
-    console.log('[emotion]', data.emotion, data.probs);
+    // store raw response for debug bar
+    window._lastServerResponse = data;
+    window._lastServerTime = Date.now();
+
+    console.log('[emotion]', data.emotion, data.probs, 'vad:', data.vad);
 
     // update emotion probabilities — index.html routes these to visuals
-    if(data.probs) updateFromEmotion(data.probs, data.emotion);
+    if(data.probs) window.updateFromEmotion(data.probs);
 
     // show question from server if present
     if(data.question) showQuestion(data.question);

@@ -23,12 +23,12 @@ function slerp(a, b, t){
   return a + (b - a) * s;
 }
 
-// called by mic.js with new server probs
-function updateFromEmotion(probs){
+// called by mic.js with new server probs — exported so index.html can wrap it
+window.updateFromEmotion = function updateFromEmotion(probs){
   for(const k of Object.keys(emotTarget)){
     if(probs[k] !== undefined) emotTarget[k] = probs[k];
   }
-}
+};
 
 // ── render loop ───────────────────────────────────────────────────────────────
 let startTime = null;

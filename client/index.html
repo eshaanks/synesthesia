@@ -133,6 +133,7 @@
     </div><!-- /knobs -->
 
     <div id="log">waiting...</div>
+    <div id="debug-bar"></div>
   </div>
 
   <script src="js/config.js"></script>
@@ -415,6 +416,24 @@
           gpuEl.textContent = v !== null ? v.toFixed(2) : '--';
         }
       });
+
+      // Debug bar — raw server response
+      const dbg = document.getElementById('debug-bar');
+      if(dbg){
+        const r = window._lastServerResponse;
+        const age = window._lastServerTime ? ((Date.now() - window._lastServerTime)/1000).toFixed(1) : '?';
+        if(r && r.probs){
+          const p = r.probs;
+          const v = r.vad || [0,0,0];
+          const silent = r.silent ? ' [silent]' : '';
+          dbg.textContent =
+            `server ${age}s ago${silent}  |  `+
+            `V=${v[0]?.toFixed(3)} A=${v[1]?.toFixed(3)} D=${v[2]?.toFixed(3)}  |  `+
+            `neu=${p.neu?.toFixed(3)} hap=${p.hap?.toFixed(3)} ang=${p.ang?.toFixed(3)} sad=${p.sad?.toFixed(3)}  →  ${r.emotion}`;
+        } else {
+          dbg.textContent = 'no server data yet';
+        }
+      }
 
       // Section 3 — live GPU values + sync slider when NOT locked
       GFX_PARAMS.forEach(p => {
