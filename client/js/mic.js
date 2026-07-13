@@ -53,22 +53,19 @@ async function sendChunk(blob){
     const data = await res.json();
     if(data.error){ log('server error: ' + data.error); return; }
 
-    // ── model pipeline log ────────────────────────────────────────────
-    console.group('── wav2vec2-emotion ──');
-    console.log('valence:  ', data.valence.toFixed(4),  ' (-1=negative  +1=positive)');
-    console.log('arousal:  ', data.arousal.toFixed(4),  ' (-1=calm      +1=excited)');
-    console.log('dominance:', data.dominance.toFixed(4),' (-1=weak      +1=strong)');
-    console.log('mapped word:', data.emotion_word, '← server vad_to_word()');
-    console.log('question src: server TEMPLATES array in server.py line ~55');
-    console.groupEnd();
+    console.log('[emotion]', data.emotion, data.probs);
 
-    // update emotion targets — transition.js lerps these slowly
-    updateFromEmotion(data.valence, data.arousal, data.dominance);
+    // update emotion probabilities — index.html routes these to visuals
+    if(data.probs) updateFromEmotion(data.probs, data.emotion);
 
     // show question from server if present
     if(data.question) showQuestion(data.question);
 
-    log(`${data.emotion_word} · v:${data.valence.toFixed(2)} a:${data.arousal.toFixed(2)} d:${data.dominance.toFixed(2)}`);
+    const top = data.emotion_word || data.emotion || '?';
+    const probStr = data.probs
+      ? Object.entries(data.probs).map(([k,v]) => `${k}:${v.toFixed(2)}`).join(' ')
+      : '';
+    log(`${top} · ${probStr}`);
   } catch(e){
     log('error: ' + e.message);
     console.error('[sendChunk]', e);

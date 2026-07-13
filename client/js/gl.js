@@ -28,9 +28,10 @@ void main(){
 //   u_rotSpeed   F0-derived rotation     → pattern rotation speed
 //
 // Layer 2 — emotion uniforms (every ~2s from wav2vec2-emotion server):
-//   u_valence    -1..+1  → hue (cold blue ↔ warm gold)
-//   u_arousal    -1..+1  → symmetry break (calm=pure mirror, excited=broken)
-//   u_dominance  -1..+1  → scale (strong=zoomed out, weak=zoomed in)
+//   u_neu  0-1  neutral probability
+//   u_hap  0-1  happy probability
+//   u_ang  0-1  angry probability
+//   u_sad  0-1  sad probability
 
 const FS_RORSCHACH = `
 precision highp float;
@@ -49,10 +50,11 @@ uniform float u_volume;       // RMS energy — loudness
 uniform float u_bass;         // bass/treble ratio — low end vs high end
 uniform float u_pitch;        // F0 estimate — fundamental frequency
 
-// emotion layer — slow mood
-uniform float u_valence;
-uniform float u_arousal;
-uniform float u_dominance;
+// emotion layer — smoothed classifier probabilities 0-1 each, sum to ~1
+uniform float u_neu;   // neutral
+uniform float u_hap;   // happy
+uniform float u_ang;   // angry
+uniform float u_sad;   // sad
 
 // FFT shape param
 uniform float u_spread;      // how wide/open the blob arms splay
@@ -224,9 +226,10 @@ const U = {
   bass:         gl.getUniformLocation(prog, 'u_bass'),
   spread:       gl.getUniformLocation(prog, 'u_spread'),
   // emotion layer
-  valence:      gl.getUniformLocation(prog, 'u_valence'),
-  arousal:      gl.getUniformLocation(prog, 'u_arousal'),
-  dominance:    gl.getUniformLocation(prog, 'u_dominance'),
+  neu:          gl.getUniformLocation(prog, 'u_neu'),
+  hap:          gl.getUniformLocation(prog, 'u_hap'),
+  ang:          gl.getUniformLocation(prog, 'u_ang'),
+  sad:          gl.getUniformLocation(prog, 'u_sad'),
   // global mood params
   colorTemp:    gl.getUniformLocation(prog, 'u_colorTemp'),
   speed:        gl.getUniformLocation(prog, 'u_speed'),
