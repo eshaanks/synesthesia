@@ -97,10 +97,51 @@ float inkNoise(vec2 p, float warpDepth, float mutRate){
   return vnoise(p + 3.0*q + 2.0*r + s) + detail * 0.35;
 }
 
-// cosine palette — phase driven by valence-mapped hue
-vec3 cosPalette(float t, float hue){
-  float ph = hue / 360.0;
-  return 0.5 + 0.5 * cos(6.28318 * (vec3(1.0,1.0,1.0)*t + vec3(ph, ph+0.33, ph+0.67)));
+// cosine palette — a,b,c,d are the standard IQ form
+// col = a + b*cos(2pi*(c*t+d))
+vec3 cosPal(float t, vec3 a, vec3 b, vec3 c, vec3 d){
+  return clamp(a + b * cos(6.28318 * (c * t + d)), 0.0, 1.0);
+}
+
+// ── per-emotion palettes ──────────────────────────────────────────────────────
+// ANGER — reds, deep oranges, hot embers. No cool tones.
+vec3 palAnger(float t){
+  return cosPal(t,
+    vec3(0.55, 0.15, 0.05),   // bias: deep red-orange base
+    vec3(0.45, 0.15, 0.05),   // amplitude
+    vec3(0.80, 1.00, 1.20),   // frequency
+    vec3(0.00, 0.25, 0.50)    // phase: locks hue in red-orange band
+  );
+}
+
+// SADNESS — desaturated blue-grey, slate, cold dark indigo. No warm tones.
+vec3 palSad(float t){
+  return cosPal(t,
+    vec3(0.12, 0.14, 0.22),   // bias: dark blue-grey base
+    vec3(0.10, 0.10, 0.18),   // low amplitude — stays muted
+    vec3(0.60, 0.70, 0.50),
+    vec3(0.55, 0.60, 0.65)    // phase: locks in cool blue-slate
+  );
+}
+
+// HAPPY — bright warm yellows, coral, sky blue, mint. Full vibrancy.
+vec3 palHappy(float t){
+  return cosPal(t,
+    vec3(0.65, 0.60, 0.45),   // bias: warm bright base
+    vec3(0.35, 0.35, 0.35),   // high amplitude — lots of colour swing
+    vec3(1.00, 0.80, 0.60),
+    vec3(0.00, 0.15, 0.40)    // phase: sweeps yellow → coral → sky
+  );
+}
+
+// NEUTRAL — balanced mid-tones, soft lavender to warm white. Unobtrusive.
+vec3 palNeutral(float t){
+  return cosPal(t,
+    vec3(0.40, 0.38, 0.42),
+    vec3(0.22, 0.20, 0.25),
+    vec3(0.80, 0.90, 0.70),
+    vec3(0.30, 0.35, 0.60)
+  );
 }
 
 void main(){
@@ -157,10 +198,27 @@ void main(){
   float spec   = pow(max(dot(nrm, ldir), 0.0), 20.0);
   float gloss  = spec * (1.0 - clamp(abs(ink-thresh)/0.07*0.8,0.0,1.0)) * shape * 0.5;
 
-  // ── colour — mood driven ───────────────────────────────────────────────────
-  float hue    = mix(235.0, 40.0, u_colorTemp);
-  vec3  inkHue = cosPalette(ink, hue) * shape * 1.2;
-  inkHue      += cosPalette(ink, hue + 60.0) * (lobesL + lobesR) * 0.5;
+  // ── colour — blended from per-emotion palettes ────────────────────────────
+  // each palette is sampled at the same noise value so texture is preserved
+  // weights are the smoothed emotion probs — they sum to ~1 so blend is stable
+  vec3 cAng  = palAnger (ink);
+  vec3 cSad  = palSad   (ink);
+  vec3 cHap  = palHappy (ink);
+  vec3 cNeu  = palNeutral(ink);
+
+  // weighted blend — emotion probs drive hue in real time
+  vec3 blended = cAng  * u_ang
+               + cSad  * u_sad
+               + cHap  * u_hap
+               + cNeu  * u_neu;
+
+  // u_colorTemp nudges the blend slightly warm or cool on top of emotion colour
+  // (keeps the manual colorTemp knob useful as a fine-tune)
+  blended = mix(blended, blended * vec3(0.85, 0.90, 1.10), (1.0 - u_colorTemp) * 0.3);
+  blended = mix(blended, blended * vec3(1.10, 1.00, 0.80), u_colorTemp * 0.3);
+
+  vec3  inkHue = blended * shape * 1.2;
+  inkHue      += blended * 0.6 * (lobesL + lobesR) * 0.5;
 
   // volume: 0=dark/dim, 1=blown out bright
   float bright = 0.3 + u_volume * 1.8;
@@ -246,9 +304,11 @@ gl.uniform1f(U.texture,      0.2);
 gl.uniform1f(U.volume,       0.3);
 gl.uniform1f(U.bass,         0.5);
 gl.uniform1f(U.spread,       0.5);
-gl.uniform1f(U.valence,     0.0);
-gl.uniform1f(U.arousal,     0.0);
-gl.uniform1f(U.dominance,   0.0);
+// emotion uniform defaults — start neutral so shader has colour from frame 1
+gl.uniform1f(U.neu,        1.0);
+gl.uniform1f(U.hap,        0.0);
+gl.uniform1f(U.ang,        0.0);
+gl.uniform1f(U.sad,        0.0);
 // global mood param defaults
 gl.uniform1f(U.colorTemp,   0.5);
 gl.uniform1f(U.speed,       1.0);
