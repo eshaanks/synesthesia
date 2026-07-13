@@ -15,8 +15,8 @@ CORS(app)
 # ── wav2vec2-emotion — load once at startup, CPU only ────────────────────────
 print("[server] loading wav2vec2-emotion...")
 MODEL_ID      = "audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim"
-processor     = Wav2Vec2Processor.from_pretrained(MODEL_ID)
-emotion_model = Wav2Vec2ForSequenceClassification.from_pretrained(MODEL_ID)
+processor     = Wav2Vec2Processor.from_pretrained(MODEL_ID, local_files_only=True)
+emotion_model = Wav2Vec2ForSequenceClassification.from_pretrained(MODEL_ID, local_files_only=True)
 emotion_model.eval()
 print("[server] ready")
 
