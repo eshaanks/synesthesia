@@ -35,6 +35,7 @@ EMOTION_POLES = {
     "neu":  np.array([0.45, 0.40, 0.50]),   # midpoint
 }
 LABELS = ["neu", "hap", "ang", "sad"]
+TEMPERATURE = 0.15   # controls sharpness of emotion assignment
 
 # ── smoothed state ─────────────────────────────────────────────────────────────
 smooth_vad   = None   # None until first real reading — avoids neutral prior drag
@@ -64,7 +65,6 @@ def vad_to_probs(valence: float, arousal: float, dominance: float) -> dict:
     Inverse-distance weighting in VAD space → soft emotion probabilities.
     Temperature controls sharpness: lower = more decisive.
     """
-    TEMPERATURE = 0.15   # tighter = more decisive emotion assignment
     vad = np.array([valence, arousal, dominance])
     scores = {
         label: np.exp(-np.linalg.norm(vad - pole) / TEMPERATURE)
@@ -77,6 +77,29 @@ def vad_to_probs(valence: float, arousal: float, dominance: float) -> dict:
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+@app.route("/config", methods=["GET"])
+def get_config():
+    return jsonify({
+        "poles": {k: v.tolist() for k, v in EMOTION_POLES.items()},
+        "temperature": TEMPERATURE,
+    })
+
+
+@app.route("/config", methods=["POST"])
+def set_config():
+    global EMOTION_POLES, TEMPERATURE
+    data = request.get_json(force=True)
+    if "poles" in data:
+        for k, coords in data["poles"].items():
+            if k in EMOTION_POLES and len(coords) == 3:
+                EMOTION_POLES[k] = np.array(coords, dtype=float)
+    if "temperature" in data:
+        TEMPERATURE = float(data["temperature"])
+    print(f"[config] updated — T={TEMPERATURE:.3f} | " +
+          " ".join(f"{k}=[{','.join(f'{x:.2f}' for x in v)}]" for k,v in EMOTION_POLES.items()))
+    return jsonify({"ok": True})
 
 
 @app.route("/search", methods=["POST"])
