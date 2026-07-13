@@ -369,6 +369,35 @@ button.active { border-color:#ff5c5c; color:#ff5c5c; }
   white-space:nowrap;
 }
 
+#emotion-test-btns{
+  position:absolute;
+  bottom:52px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:5;
+  display:flex;
+  gap:8px;
+  transition:left .3s ease;
+}
+#app.panel-open #emotion-test-btns{ left:calc(50% + 190px); }
+
+#emotion-test-btns button{
+  padding:6px 16px;
+  font-size:11px;
+  letter-spacing:.1em;
+  border-radius:16px;
+  text-transform:uppercase;
+}
+#emotion-test-btns #eb-ang        { border-color:rgba(220,60,30,0.5);  color:rgba(220,60,30,0.8); }
+#emotion-test-btns #eb-ang.active { background:rgba(220,60,30,0.25); border-color:#dc3c1e; color:#ff6b4a; }
+#emotion-test-btns #eb-sad        { border-color:rgba(80,110,180,0.5); color:rgba(100,130,200,0.8); }
+#emotion-test-btns #eb-sad.active { background:rgba(80,110,180,0.2);  border-color:#6488c8; color:#8fb0e8; }
+#emotion-test-btns #eb-hap        { border-color:rgba(220,180,30,0.5); color:rgba(220,180,30,0.8); }
+#emotion-test-btns #eb-hap.active { background:rgba(220,180,30,0.2);  border-color:#dcb41e; color:#ffd84a; }
+#emotion-test-btns #eb-neu        { border-color:rgba(160,150,180,0.5);color:rgba(160,150,180,0.8); }
+#emotion-test-btns #eb-neu.active { background:rgba(160,150,180,0.15);border-color:#a096b4; color:#c8bedd; }
+#emotion-test-btns .auto-btn.active{ border-color:var(--cyan); color:var(--cyan); }
+
 #debug-bar{
   position:absolute;
   top:0; left:0; right:0;

@@ -22,6 +22,14 @@
       <button onclick="toggleKnobs()">knobs</button>
     </div>
 
+    <div id="emotion-test-btns">
+      <button onclick="forceEmotion('neu')" id="eb-neu">neutral</button>
+      <button onclick="forceEmotion('hap')" id="eb-hap">happy</button>
+      <button onclick="forceEmotion('ang')" id="eb-ang">anger</button>
+      <button onclick="forceEmotion('sad')" id="eb-sad">sad</button>
+      <button onclick="forceEmotion(null)"  id="eb-auto" class="auto-btn">auto</button>
+    </div>
+
     <!-- ══ LEFT SIDEBAR ══════════════════════════════════════════════════════════ -->
     <div id="knobs" class="hidden">
       <div class="panel-scroll">
@@ -486,6 +494,38 @@
         }
       });
     }, 80);
+  <script>
+  // ── emotion test buttons ───────────────────────────────────────────────────────
+  let _forcedEmotion = null;
+
+  function forceEmotion(key) {
+    _forcedEmotion = key;
+    // update button states
+    ['neu','hap','ang','sad',null].forEach(k => {
+      const id = k === null ? 'eb-auto' : 'eb-' + k;
+      const btn = document.getElementById(id);
+      if(btn) btn.classList.toggle('active', k === key);
+    });
+
+    if(key === null) {
+      // auto — let server drive again, do nothing else
+      return;
+    }
+
+    // immediately slam emotTarget and emotCurrent so it responds without lerp wait
+    const snap = { neu:0, hap:0, ang:0, sad:0 };
+    snap[key] = 1.0;
+    // write directly to both target and current — bypasses lerp entirely
+    if(typeof emotTarget  !== 'undefined') Object.assign(emotTarget,  snap);
+    if(typeof emotionCurrent !== 'undefined') Object.assign(emotionCurrent, snap);
+  }
+
+  // intercept updateFromEmotion so forced mode blocks server from overriding
+  const _realUpdate = window.updateFromEmotion;
+  window.updateFromEmotion = function(probs) {
+    if(_forcedEmotion !== null) return; // locked to manual
+    if(typeof _realUpdate === 'function') _realUpdate(probs);
+  };
   </script>
 
   <script>

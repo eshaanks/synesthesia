@@ -3,6 +3,7 @@
 // emotion probability targets — set by server chunks (0-1 each, sum ~1)
 const emotTarget  = { neu:0.25, hap:0.25, ang:0.25, sad:0.25 };
 const emotCurrent = { neu:0.25, hap:0.25, ang:0.25, sad:0.25 };
+window.emotTarget    = emotTarget;
 window.emotionCurrent = emotCurrent;
 
 // FFT shape targets — set by visualizer.js each frame
