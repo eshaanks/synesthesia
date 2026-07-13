@@ -361,11 +361,18 @@
     // ── live emotion prob state — written by mic.js via updateFromEmotion ────
     const _rawProbs = { neu:0.25, hap:0.25, ang:0.25, sad:0.25 };
 
-    const _origUpdate = window.updateFromEmotion;
+    // single canonical handler — wraps transition.js's window.updateFromEmotion
+    // also handles forced-emotion lock (set by test buttons)
     window.updateFromEmotion = function(probs){
+      if(window._forcedEmotion !== null && window._forcedEmotion !== undefined) return;
       Object.assign(_rawProbs, probs);
       applyModelRouting();
-      if(typeof _origUpdate === 'function') _origUpdate(probs);
+      // push to emotTarget in transition.js (already on window)
+      if(typeof emotTarget !== 'undefined'){
+        for(const k of Object.keys(emotTarget)){
+          if(probs[k] !== undefined) emotTarget[k] = probs[k];
+        }
+      }
     };
 
     function applyModelRouting(){
@@ -494,38 +501,31 @@
         }
       });
     }, 80);
+  </script>
+
   <script>
   // ── emotion test buttons ───────────────────────────────────────────────────────
-  let _forcedEmotion = null;
+  window._forcedEmotion = null;
 
   function forceEmotion(key) {
-    _forcedEmotion = key;
-    // update button states
-    ['neu','hap','ang','sad',null].forEach(k => {
-      const id = k === null ? 'eb-auto' : 'eb-' + k;
-      const btn = document.getElementById(id);
+    window._forcedEmotion = key;
+
+    // highlight active button
+    ['neu','hap','ang','sad'].forEach(k => {
+      const btn = document.getElementById('eb-' + k);
       if(btn) btn.classList.toggle('active', k === key);
     });
+    const autoBtn = document.getElementById('eb-auto');
+    if(autoBtn) autoBtn.classList.toggle('active', key === null);
 
-    if(key === null) {
-      // auto — let server drive again, do nothing else
-      return;
-    }
+    if(key === null) return; // auto mode — server takes over again
 
-    // immediately slam emotTarget and emotCurrent so it responds without lerp wait
+    // snap both target and current immediately — no lerp wait
     const snap = { neu:0, hap:0, ang:0, sad:0 };
     snap[key] = 1.0;
-    // write directly to both target and current — bypasses lerp entirely
-    if(typeof emotTarget  !== 'undefined') Object.assign(emotTarget,  snap);
-    if(typeof emotionCurrent !== 'undefined') Object.assign(emotionCurrent, snap);
+    if(typeof emotTarget      !== 'undefined') Object.assign(emotTarget,      snap);
+    if(typeof emotionCurrent  !== 'undefined') Object.assign(emotionCurrent,  snap);
   }
-
-  // intercept updateFromEmotion so forced mode blocks server from overriding
-  const _realUpdate = window.updateFromEmotion;
-  window.updateFromEmotion = function(probs) {
-    if(_forcedEmotion !== null) return; // locked to manual
-    if(typeof _realUpdate === 'function') _realUpdate(probs);
-  };
   </script>
 
   <script>
