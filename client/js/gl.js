@@ -50,11 +50,14 @@ uniform float u_volume;       // RMS energy — loudness
 uniform float u_bass;         // bass/treble ratio — low end vs high end
 uniform float u_pitch;        // F0 estimate — fundamental frequency
 
-// emotion layer — smoothed classifier probabilities 0-1 each, sum to ~1
-uniform float u_neu;   // neutral
-uniform float u_hap;   // happy
-uniform float u_ang;   // angry
-uniform float u_sad;   // sad
+// emotion layer — raw VAD position drives the 2D colour wheel directly
+uniform float u_valence;     // 0=negative → 1=positive
+uniform float u_arousal;     // 0=calm → 1=active
+
+// colour wheel controls
+uniform float u_colorRadius; // 0=tight solid colour, 1=wide hue family sweep
+uniform float u_hueShift;    // 0-1 global hue rotation of the whole wheel
+uniform int   u_palette;     // 0=Vivid 1=Neon 2=Ember 3=Dusk 4=Mono
 
 // FFT shape param
 uniform float u_spread;      // how wide/open the blob arms splay
@@ -97,37 +100,73 @@ float inkNoise(vec2 p, float warpDepth, float mutRate){
   return vnoise(p + 3.0*q + 2.0*r + s) + detail * 0.35;
 }
 
-// ── per-emotion base colours ───────────────────────────────────────────────────
-// Returns a fixed RGB colour for each emotion.
-// The noise field (ink) is used ONLY for brightness modulation, not hue,
-// so the whole blob stays one coherent colour per emotion.
-
-// ANGER — deep crimson-red with orange ember highlights
-vec3 palAnger(float brightness){
-  vec3 shadow    = vec3(0.55, 0.04, 0.02);  // dark crimson
-  vec3 highlight = vec3(1.00, 0.35, 0.05);  // hot orange-red
-  return mix(shadow, highlight, brightness);
+// ── HSV ↔ RGB helpers ────────────────────────────────────────────────────────
+vec3 hsv2rgb(vec3 c){
+  vec3 p = abs(fract(c.xxx + vec3(0.0,2.0/3.0,1.0/3.0)) * 6.0 - 3.0);
+  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
 }
 
-// SADNESS — cold dark slate to grey-blue. Muted, desaturated.
-vec3 palSad(float brightness){
-  vec3 shadow    = vec3(0.05, 0.07, 0.15);  // near-black cold indigo
-  vec3 highlight = vec3(0.35, 0.42, 0.60);  // grey-blue slate
-  return mix(shadow, highlight, brightness * 0.7); // cap brightness — stays dark
+// ── palette hue anchors ───────────────────────────────────────────────────────
+// Each palette defines 4 anchor hues (0-1) for [anger, happy, sad, calm].
+// At the periphery of each quadrant the colour lands exactly on that hue.
+// Moving toward centre the hues blend, and u_colorRadius sweeps hue within
+// each family so adjacent pixels show different related hues (not flat).
+//
+// Palette 0 — Vivid   : crimson / gold / indigo / sage
+// Palette 1 — Neon    : magenta / cyan / violet / lime
+// Palette 2 — Ember   : burnt-orange / amber / dark-teal / rose
+// Palette 3 — Dusk    : blood-red / coral / midnight / lavender
+// Palette 4 — Mono    : red-grey / warm-white / cool-grey / mid-grey
+
+vec4 paletteHues(){
+  // returns vec4(angHue, hapHue, sadHue, calmHue) in 0-1 hue space
+  if(u_palette == 1) return vec4(0.83, 0.50, 0.75, 0.33); // neon
+  if(u_palette == 2) return vec4(0.06, 0.12, 0.48, 0.93); // ember
+  if(u_palette == 3) return vec4(0.00, 0.05, 0.63, 0.74); // dusk
+  if(u_palette == 4) return vec4(0.00, 0.10, 0.58, 0.35); // mono (low sat)
+  return vec4(0.00, 0.14, 0.65, 0.38);                    // vivid (default)
 }
 
-// HAPPY — warm golden yellow to bright coral/peach
-vec3 palHappy(float brightness){
-  vec3 shadow    = vec3(0.55, 0.35, 0.05);  // amber-gold
-  vec3 highlight = vec3(1.00, 0.90, 0.40);  // bright sunny yellow
-  return mix(shadow, highlight, brightness);
+vec2 paletteSatRange(){
+  // returns vec2(satAtPeriphery, satAtCentre) — mono is desaturated
+  if(u_palette == 4) return vec2(0.25, 0.05);
+  return vec2(0.92, 0.18);
 }
 
-// NEUTRAL — soft warm white to pale grey-violet. Unobtrusive.
-vec3 palNeutral(float brightness){
-  vec3 shadow    = vec3(0.20, 0.18, 0.25);  // dark muted violet-grey
-  vec3 highlight = vec3(0.75, 0.73, 0.82);  // pale lavender-white
-  return mix(shadow, highlight, brightness);
+// ── 2D VAD colour field ────────────────────────────────────────────────────────
+// VAD coordinate → HSV colour.
+// The hue is bilinearly interpolated from the 4 quadrant anchors.
+// u_colorRadius controls how far the per-pixel ink noise can push the hue
+// within the local colour family — 0=solid, 1=wide painterly sweep.
+vec3 vadColor(float v, float a, float inkNoise0, float inkNoise1){
+  vec4  hues    = paletteHues();
+  vec2  satR    = paletteSatRange();
+
+  // bilinear hue blend across V×A grid
+  // low-arousal row: sad(lowV) → calm(highV)
+  // high-arousal row: anger(lowV) → happy(highV)
+  float loHue = mix(hues.z, hues.w, v);
+  float hiHue = mix(hues.x, hues.y, v);
+  float baseHue = mix(loHue, hiHue, a);
+
+  // distance from VAD centre → 0 at centre, 1 at extreme periphery
+  float vadDist = clamp(length(vec2(v, a) - vec2(0.5, 0.4)) * 2.2, 0.0, 1.0);
+
+  // hue neighbourhood: ink noise offsets hue by up to colorRadius * bandwidth
+  // bandwidth scales with distance — periphery is tighter (strong identity),
+  // centre is wider (more colour variety in the blend zone)
+  float bandwidth = 0.10 + (1.0 - vadDist) * 0.18;
+  float hueJitter = (inkNoise0 - 0.5) * 2.0 * u_colorRadius * bandwidth;
+  // secondary noise layer for extra organic variation
+  float hueJitter2 = (inkNoise1 - 0.5) * u_colorRadius * bandwidth * 0.4;
+  float hue = fract(baseHue + hueJitter + hueJitter2 + u_hueShift);
+
+  // saturation: strong at periphery, open/varied near centre
+  float sat = mix(satR.y, satR.x, smoothstep(0.0, 1.0, vadDist));
+  // radius also slightly desaturates to let hue variety read
+  sat *= (1.0 - u_colorRadius * 0.25);
+
+  return vec3(hue, sat, 1.0); // value filled in later (brightness from ink)
 }
 
 void main(){
@@ -184,21 +223,21 @@ void main(){
   float spec   = pow(max(dot(nrm, ldir), 0.0), 20.0);
   float gloss  = spec * (1.0 - clamp(abs(ink-thresh)/0.07*0.8,0.0,1.0)) * shape * 0.5;
 
-  // ── colour — emotion-driven ───────────────────────────────────────────────
-  // ink drives brightness within each palette (shadow→highlight),
-  // NOT hue — so the whole blob stays one coherent colour per emotion.
-  float bri = clamp(ink * 1.4 - 0.1, 0.0, 1.0);
+  // ── HSV colour field sampled at VAD position ─────────────────────────────
+  // Two independent noise samples for hue jitter — use different offsets
+  // so spatial hue variation is uncorrelated with the shape threshold noise.
+  float inkN0 = inkNoise(pL + vec2(3.7, 8.1), warpDepth * 0.5, u_movement * 0.6);
+  float inkN1 = inkNoise(pL + vec2(11.3, 2.9), warpDepth * 0.4, u_movement * 0.4);
 
-  vec3 cAng = palAnger  (bri);
-  vec3 cSad = palSad    (bri);
-  vec3 cHap = palHappy  (bri);
-  vec3 cNeu = palNeutral(bri);
+  vec3 hsv = vadColor(u_valence, u_arousal, inkN0, inkN1);
 
-  // blend by smoothed emotion probs — the dominant emotion owns the hue
-  vec3 blended = cAng * u_ang
-               + cSad * u_sad
-               + cHap * u_hap
-               + cNeu * u_neu;
+  // brightness from main ink noise — shadow areas are dark, highlights vivid
+  float bri = clamp(ink * 1.5 - 0.15, 0.0, 1.0);
+  // ramp: shadow pixels go very dark, highlights go full bright
+  float briVal = bri * bri * 0.35 + bri * 0.65;
+  hsv.z = briVal;
+
+  vec3 blended = hsv2rgb(hsv);
 
   vec3  inkHue = blended * shape * 1.3;
   inkHue      += blended * 0.5 * (lobesL + lobesR) * 0.5;
@@ -266,11 +305,12 @@ const U = {
   volume:       gl.getUniformLocation(prog, 'u_volume'),
   bass:         gl.getUniformLocation(prog, 'u_bass'),
   spread:       gl.getUniformLocation(prog, 'u_spread'),
-  // emotion layer
-  neu:          gl.getUniformLocation(prog, 'u_neu'),
-  hap:          gl.getUniformLocation(prog, 'u_hap'),
-  ang:          gl.getUniformLocation(prog, 'u_ang'),
-  sad:          gl.getUniformLocation(prog, 'u_sad'),
+  // VAD colour wheel
+  valence:      gl.getUniformLocation(prog, 'u_valence'),
+  arousal:      gl.getUniformLocation(prog, 'u_arousal'),
+  colorRadius:  gl.getUniformLocation(prog, 'u_colorRadius'),
+  hueShift:     gl.getUniformLocation(prog, 'u_hueShift'),
+  palette:      gl.getUniformLocation(prog, 'u_palette'),
   // global mood params
   colorTemp:    gl.getUniformLocation(prog, 'u_colorTemp'),
   speed:        gl.getUniformLocation(prog, 'u_speed'),
@@ -287,11 +327,12 @@ gl.uniform1f(U.texture,      0.2);
 gl.uniform1f(U.volume,       0.3);
 gl.uniform1f(U.bass,         0.5);
 gl.uniform1f(U.spread,       0.5);
-// emotion uniform defaults — start neutral so shader has colour from frame 1
-gl.uniform1f(U.neu,        1.0);
-gl.uniform1f(U.hap,        0.0);
-gl.uniform1f(U.ang,        0.0);
-gl.uniform1f(U.sad,        0.0);
+// VAD defaults — start at calm-neutral centre so shader has colour from frame 1
+gl.uniform1f(U.valence,      0.5);
+gl.uniform1f(U.arousal,      0.4);
+gl.uniform1f(U.colorRadius,  0.45);
+gl.uniform1f(U.hueShift,     0.0);
+gl.uniform1i(U.palette,      0);
 // global mood param defaults
 gl.uniform1f(U.colorTemp,   0.5);
 gl.uniform1f(U.speed,       1.0);

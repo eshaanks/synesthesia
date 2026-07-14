@@ -62,6 +62,12 @@ async function sendChunk(blob){
     // update emotion probabilities — index.html routes these to visuals
     if(data.probs) window.updateFromEmotion(data.probs);
 
+    // push raw VAD position into the 2D colour wheel
+    if(data.vad && window.vadTarget){
+      window.vadTarget.v = data.vad[0];  // valence
+      window.vadTarget.a = data.vad[1];  // arousal
+    }
+
     // show question from server if present
     if(data.question) showQuestion(data.question);
 

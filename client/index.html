@@ -39,6 +39,56 @@
           <p>signal routing &amp; mood control</p>
         </div>
 
+        <!-- ── SECTION 0: COLOUR PALETTE ───────────────────────────────────────── -->
+        <div class="panel-section" style="background:var(--bg-1);border-bottom:1px solid var(--line);">
+          <div class="panel-title" style="color:#f472b6;">
+            Colour Palette
+            <span class="sub">VAD colour wheel · live</span>
+          </div>
+
+          <!-- palette picker buttons -->
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
+            <button class="pal-btn active" id="pal-0" onclick="setPalette(0)"
+              style="padding:5px 12px;font-size:10px;border-radius:12px;border-color:rgba(255,80,120,0.5);color:rgba(255,80,120,0.9);">
+              Vivid
+            </button>
+            <button class="pal-btn" id="pal-1" onclick="setPalette(1)"
+              style="padding:5px 12px;font-size:10px;border-radius:12px;border-color:rgba(0,229,255,0.4);color:rgba(0,229,255,0.8);">
+              Neon
+            </button>
+            <button class="pal-btn" id="pal-2" onclick="setPalette(2)"
+              style="padding:5px 12px;font-size:10px;border-radius:12px;border-color:rgba(255,140,0,0.5);color:rgba(255,140,0,0.9);">
+              Ember
+            </button>
+            <button class="pal-btn" id="pal-3" onclick="setPalette(3)"
+              style="padding:5px 12px;font-size:10px;border-radius:12px;border-color:rgba(180,100,220,0.5);color:rgba(180,100,220,0.9);">
+              Dusk
+            </button>
+            <button class="pal-btn" id="pal-4" onclick="setPalette(4)"
+              style="padding:5px 12px;font-size:10px;border-radius:12px;border-color:rgba(180,180,180,0.4);color:rgba(180,180,180,0.8);">
+              Mono
+            </button>
+          </div>
+
+          <!-- colour radius slider -->
+          <div class="mood-row">
+            <div class="p-label">Colour Radius<small>0=solid · 1=wide hue family</small></div>
+            <input type="range" min="0" max="1" step="0.01" value="0.45" id="sl-colorRadius"
+              style="width:100%;accent-color:#f472b6;"
+              oninput="setColorRadius(+this.value)">
+            <div class="p-value" id="val-colorRadius" style="color:#f472b6;">0.45</div>
+          </div>
+
+          <!-- hue shift slider -->
+          <div class="mood-row">
+            <div class="p-label">Hue Shift<small>rotate entire colour wheel</small></div>
+            <input type="range" min="0" max="1" step="0.01" value="0" id="sl-hueShift"
+              style="width:100%;accent-color:#f472b6;"
+              oninput="setHueShift(+this.value)">
+            <div class="p-value" id="val-hueShift" style="color:#f472b6;">0.00</div>
+          </div>
+        </div>
+
         <!-- ── SECTION 1: VOICE → SHAPE ─────────────────────────────────────── -->
         <div class="panel-section">
           <div class="panel-title">
@@ -507,6 +557,14 @@
   // ── emotion test buttons ───────────────────────────────────────────────────────
   window._forcedEmotion = null;
 
+  // Canonical VAD positions for each forced emotion quadrant
+  const VAD_SNAPS = {
+    ang: { v: 0.10, a: 0.80 },   // low valence, high arousal → vivid crimson
+    hap: { v: 0.90, a: 0.80 },   // high valence, high arousal → bright gold
+    sad: { v: 0.10, a: 0.15 },   // low valence, low arousal → cold indigo
+    neu: { v: 0.50, a: 0.40 },   // centre → sage/warm grey
+  };
+
   function forceEmotion(key) {
     window._forcedEmotion = key;
 
@@ -520,11 +578,37 @@
 
     if(key === null) return; // auto mode — server takes over again
 
-    // snap both target and current immediately — no lerp wait
+    // snap emotion probs (for routing / debug display)
     const snap = { neu:0, hap:0, ang:0, sad:0 };
     snap[key] = 1.0;
     if(typeof emotTarget      !== 'undefined') Object.assign(emotTarget,      snap);
     if(typeof emotionCurrent  !== 'undefined') Object.assign(emotionCurrent,  snap);
+
+    // snap VAD position to quadrant — drives colour wheel immediately
+    if(window.vadTarget && VAD_SNAPS[key]){
+      Object.assign(window.vadTarget,  VAD_SNAPS[key]);
+      Object.assign(window.vadCurrent, VAD_SNAPS[key]);
+    }
+  }
+  </script>
+
+  <script>
+  // ── colour palette controls ───────────────────────────────────────────────────
+  function setPalette(idx){
+    if(typeof U === 'undefined' || typeof gl === 'undefined') return;
+    gl.useProgram(prog);
+    gl.uniform1i(U.palette, idx);
+    document.querySelectorAll('.pal-btn').forEach((b,i) => b.classList.toggle('active', i === idx));
+  }
+
+  function setColorRadius(v){
+    if(typeof U !== 'undefined') { gl.useProgram(prog); gl.uniform1f(U.colorRadius, v); }
+    document.getElementById('val-colorRadius').textContent = v.toFixed(2);
+  }
+
+  function setHueShift(v){
+    if(typeof U !== 'undefined') { gl.useProgram(prog); gl.uniform1f(U.hueShift, v); }
+    document.getElementById('val-hueShift').textContent = v.toFixed(2);
   }
   </script>
 

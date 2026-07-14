@@ -6,6 +6,10 @@ const emotCurrent = { neu:0.25, hap:0.25, ang:0.25, sad:0.25 };
 window.emotTarget    = emotTarget;
 window.emotionCurrent = emotCurrent;
 
+// VAD position targets — drive the 2D colour wheel directly
+window.vadTarget  = { v:0.5, a:0.4 };
+window.vadCurrent = { v:0.5, a:0.4 };
+
 // FFT shape targets — set by visualizer.js each frame
 window.fftTarget  = { brightness:0.5, tone:0.3, movement:0.1, texture:0.2, volume:0.2, bass:0.5, spread:0.5 };
 window.fftCurrent = { brightness:0.5, tone:0.3, movement:0.1, texture:0.2, volume:0.2, bass:0.5, spread:0.5 };
@@ -48,14 +52,14 @@ function renderLoop(ts){
   for(const k of FFT_KEYS)  window.fftCurrent[k]  = slerp(window.fftCurrent[k],  window.fftTarget[k],  fftFactor);
   for(const k of MOOD_KEYS) window.moodCurrent[k]  = slerp(window.moodCurrent[k], window.moodTarget[k], moodFactor);
   for(const k of EMOT_KEYS) emotCurrent[k]         = slerp(emotCurrent[k],        emotTarget[k],        emotFactor);
+  window.vadCurrent.v = slerp(window.vadCurrent.v, window.vadTarget.v, emotFactor);
+  window.vadCurrent.a = slerp(window.vadCurrent.a, window.vadTarget.a, emotFactor);
 
   gl.useProgram(prog);
   gl.uniform1f(U.time,       t);
 
-  gl.uniform1f(U.neu,        emotCurrent.neu);
-  gl.uniform1f(U.hap,        emotCurrent.hap);
-  gl.uniform1f(U.ang,        emotCurrent.ang);
-  gl.uniform1f(U.sad,        emotCurrent.sad);
+  gl.uniform1f(U.valence,    window.vadCurrent.v);
+  gl.uniform1f(U.arousal,   window.vadCurrent.a);
 
   gl.uniform1f(U.brightness, window.fftCurrent.brightness);
   gl.uniform1f(U.tone,       window.fftCurrent.tone);
