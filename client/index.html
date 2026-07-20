@@ -39,6 +39,17 @@
         oninput="window.textStyle.size=+this.value; document.getElementById('fontSizeVal').textContent=this.value"
         style="width:80px;accent-color:var(--cyan);vertical-align:middle;">
       <span id="fontSizeVal" style="font-size:11px;color:var(--txt-lo);min-width:24px;display:inline-block;">28</span>
+      <span class="res-label" style="margin-left:10px;">transient:</span>
+      <input id="transientThreshSlider" type="range" min="1.5" max="8" step="0.1" value="3.5"
+        oninput="window.transientSettings.threshold=+this.value; document.getElementById('transientThreshVal').textContent=this.value"
+        style="width:70px;accent-color:var(--amber);vertical-align:middle;"
+        title="Sensitivity — lower triggers more easily">
+      <span id="transientThreshVal" style="font-size:11px;color:var(--txt-lo);min-width:28px;display:inline-block;">3.5</span>
+      <input id="transientNudgeSlider" type="range" min="0" max="0.5" step="0.01" value="0.33"
+        oninput="window.transientSettings.nudge=+this.value; document.getElementById('transientNudgeVal').textContent=this.value"
+        style="width:70px;accent-color:var(--amber);vertical-align:middle;"
+        title="Colour shift amount on transient">
+      <span id="transientNudgeVal" style="font-size:11px;color:var(--txt-lo);min-width:28px;display:inline-block;">0.33</span>
     </div>
 
     <div id="emotion-test-btns">
@@ -561,6 +572,9 @@
     // ── push colour wheel params (colorRadius, hueShift, colorBand) each frame ──
     const _colourCurrent = { colorRadius: 0.74, hueShift: 0.0, colorBand: 0.7 };
 
+    // transient flash settings — exposed so sliders can mutate them
+    window.transientSettings = { threshold: 3.5, nudge: 0.33 };
+
     function pushColourUniforms(){
       if(typeof U === 'undefined' || typeof gl === 'undefined') return;
       gl.useProgram(prog);
@@ -571,7 +585,6 @@
         if(gfxLock[k]){
           target = gfxManual[k];
         } else {
-          // manual value is always the baseline; FFT/model add on top
           target = gfxManual[k];
           if(fftColour[k]          !== undefined) target += fftColour[k];
           if(_scalarColourAccum[k] !== undefined) target += _scalarColourAccum[k];
@@ -580,10 +593,13 @@
         delete _scalarColourAccum[k];
         const a = gfxLerp[k] ?? 0.5;
         _colourCurrent[k] += (target - _colourCurrent[k]) * a;
-        if(k === 'colorRadius') gl.uniform1f(U.colorRadius, _colourCurrent[k]);
-        if(k === 'hueShift')    gl.uniform1f(U.hueShift,    _colourCurrent[k]);
-        if(k === 'colorBand')   gl.uniform1f(U.colorBand,   _colourCurrent[k]);
       });
+
+      // transient hueShift nudge — adds on top, decays with transientStrength
+      const nudge = (window._transientStrength || 0) * (window.transientSettings.nudge);
+      gl.uniform1f(U.colorRadius, _colourCurrent.colorRadius);
+      gl.uniform1f(U.hueShift,    (_colourCurrent.hueShift + nudge) % 1.0);
+      gl.uniform1f(U.colorBand,   _colourCurrent.colorBand);
     }
 
     const _origGlobalTick = window._globalTick;

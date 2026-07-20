@@ -9,6 +9,10 @@ let fftAnimId   = null;
 let vizCanvas   = null;
 let vizCtx      = null;
 
+// transient detector state
+let _fluxAvg    = 0;
+let _transientHold = 0;   // countdown frames after a hit
+
 // ── 12 smoothed signals ───────────────────────────────────────────────────────
 const fftSmooth = {
   volume:0.2,   bass:0.5,      midrange:0.4,  presence:0.3,
@@ -174,6 +178,19 @@ function fftLoop(ts){
   }
   const movement = (safe && voiced)
     ? Math.min(Math.sqrt(fluxSum / binCount) / (totalPower * 0.01 + 1e-10) * 0.3, 1.0) : 0;
+
+  // ── transient detector — sudden flux spike vs slow average ───────────────────
+  const fluxNorm = safe ? Math.sqrt(fluxSum / binCount) / (totalPower * 0.01 + 1e-10) : 0;
+  _fluxAvg = 0.97 * _fluxAvg + 0.03 * fluxNorm;
+  const transientRatio = _fluxAvg > 0.001 ? fluxNorm / _fluxAvg : 0;
+  const transientThreshold = (window.transientSettings && window.transientSettings.threshold) || 3.5;
+  if(transientRatio > transientThreshold && voiced && safe){
+    _transientHold = 18;   // ~300ms at 60fps
+  } else if(_transientHold > 0){
+    _transientHold--;
+  }
+  window._transientActive = _transientHold > 0;
+  window._transientStrength = Math.min(_transientHold / 18, 1.0);
 
   // ── spread — air / breath (10kHz+) ───────────────────────────────────────────
   const spread = (safe && voiced) ? Math.min(airE / totalPower * 20.0, 1.0) : 0;
