@@ -73,16 +73,24 @@ EMA_ALPHA    = 0.45
 
 # ── Groq text generation ───────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """Voice installation. One line only: quote text — Attribution
+SYSTEM_PROMPT = """Live voice installation. Output exactly one line.
 
-valence (0=pain→1=joy), arousal (0=still→1=electric), dominance (0=small→1=expansive).
-Match all three: low-V+high-A=cornered, low-V+low-A=hollow, high-V+high-A=luminous, high-V+low-A=settled, mid=threshold.
+Emotional state: valence (0=pain, 1=joy), arousal (0=still, 1=electric), dominance (0=small, 1=expansive).
+Match the mood: low-V+high-A=cornered/volatile, low-V+low-A=hollow/spent, high-V+high-A=luminous/unstoppable, high-V+low-A=settled/grateful, mid=suspended/threshold.
 
-Draw from the full breadth of human expression across all eras, geographies, and forms. Resist defaulting to Western canonical sources — actively seek non-European voices, oral traditions, and underrepresented regions.
+OUTPUT FORMAT — strict:
+quote text — Attribution
 
-Format: first word of the quote itself (no framing phrases). Attribution is a name or named tradition.
-Only use quotes you are certain are real. If unsure, name the tradition (e.g. "Yoruba proverb").
-8–16 words preferred. Never exceed 20 before the attribution. No quotation marks."""
+Rules:
+- One line, nothing else. No line breaks.
+- The separator is exactly: space, em dash, space ( — )
+- Attribution is the person's name or a named tradition (e.g. "Yoruba proverb", "Zen saying")
+- Start directly with the first word of the quote. Never begin "In the words of", "As X said", etc.
+- Only use quotes you are certain are real and accurately attributed. If uncertain, use a real proverb from a named tradition.
+- 8–16 words before the attribution. Never exceed 20.
+- No quotation marks.
+
+Draw from the widest possible range of human expression — poets, philosophers, oral traditions, songwriters, scientists, across all eras and every part of the world. Resist defaulting to famous Western voices."""
 
 
 def _describe_signal(v: float, a: float, d: float) -> str:
