@@ -109,15 +109,21 @@ def _clean_quote(text: str) -> str:
 _text_cache   = ""
 _text_lock    = threading.Lock()
 _text_pending = False
+_recent_quotes: list[str] = []   # last 12 quotes shown
+_RECENT_MAX = 12
 
 def _generate_groq_async(v: float, a: float, d: float):
-    global _text_cache, _text_pending
+    global _text_cache, _text_pending, _recent_quotes
     try:
         context = _describe_signal(v, a, d)
+        with _text_lock:
+            recent = list(_recent_quotes)
+        avoid = "\n\nDo not use any of these quotes — they were shown recently:\n" + \
+                "\n".join(f"- {q}" for q in recent) if recent else ""
         resp = _groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": SYSTEM_PROMPT + avoid},
                 {"role": "user",   "content": context},
             ],
             max_tokens=60,
@@ -126,6 +132,9 @@ def _generate_groq_async(v: float, a: float, d: float):
         text = _clean_quote(resp.choices[0].message.content.strip())
         with _text_lock:
             _text_cache = text
+            _recent_quotes.append(text)
+            if len(_recent_quotes) > _RECENT_MAX:
+                _recent_quotes.pop(0)
     except Exception as e:
         print(f"[groq] error: {e}")
     finally:
