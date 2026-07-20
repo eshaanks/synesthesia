@@ -106,14 +106,17 @@ def _clean_quote(text: str) -> str:
     return text.strip('"').strip()
 
 # async text generation — runs in background thread, result cached
-_text_cache   = ""
-_text_lock    = threading.Lock()
-_text_pending = False
-_recent_quotes: list[str] = []   # last 12 quotes shown
-_RECENT_MAX = 12
+_text_cache    = ""
+_text_lock     = threading.Lock()
+_text_pending  = False
+_recent_quotes: list[str] = []
+_RECENT_MAX    = 12
+_groq_model    = "none"          # tracks which model last succeeded
+
+_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
 def _generate_groq_async(v: float, a: float, d: float):
-    global _text_cache, _text_pending, _recent_quotes
+    global _text_cache, _text_pending, _recent_quotes, _groq_model
     try:
         context = _describe_signal(v, a, d)
         with _text_lock:
@@ -124,23 +127,27 @@ def _generate_groq_async(v: float, a: float, d: float):
             {"role": "system", "content": SYSTEM_PROMPT + avoid},
             {"role": "user",   "content": context},
         ]
-        try:
-            resp = _groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=msgs, max_tokens=60, temperature=0.85,
-            )
-        except Exception:
-            # fall back to 8b if 70b is rate-limited
-            resp = _groq_client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=msgs, max_tokens=60, temperature=0.85,
-            )
+        resp = None
+        used_model = "none"
+        for model in _MODELS:
+            try:
+                resp = _groq_client.chat.completions.create(
+                    model=model, messages=msgs, max_tokens=60, temperature=0.85,
+                )
+                used_model = model
+                break
+            except Exception as e:
+                print(f"[groq] {model} failed: {e} — trying next")
+        if resp is None:
+            raise RuntimeError("all models failed")
         text = _clean_quote(resp.choices[0].message.content.strip())
         with _text_lock:
             _text_cache = text
+            _groq_model = used_model
             _recent_quotes.append(text)
             if len(_recent_quotes) > _RECENT_MAX:
                 _recent_quotes.pop(0)
+        print(f"[groq] {used_model} → {text[:60]}")
     except Exception as e:
         print(f"[groq] error: {e}")
     finally:
@@ -344,12 +351,15 @@ def search():
               + " ".join(f"{l}={smooth_probs[l]:.3f}" for l in LABELS)
               + f" | top={top_label}")
 
+        with _text_lock:
+            cur_model = _groq_model
         return jsonify({
             "probs":        smooth_probs,
             "vad":          [round(float(x), 4) for x in smooth_vad],  # type: ignore
             "emotion":      top_label,
             "emotion_word": top_label,
             "question":     question,
+            "groq_model":   cur_model,
             "silent":       False,
         })
 

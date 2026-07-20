@@ -80,7 +80,10 @@ async function sendChunk(blob){
     const probStr = data.probs
       ? Object.entries(data.probs).map(([k,v]) => `${k}:${v.toFixed(2)}`).join(' ')
       : '';
-    log(`${top} · ${probStr}`);
+    const modelLabel = data.groq_model
+      ? data.groq_model.replace('llama-3.3-70b-versatile','70b').replace('llama-3.1-8b-instant','8b').replace('none','—')
+      : '—';
+    log(`${top} · ${probStr} · groq:${modelLabel}`);
   } catch(e){
     log('error: ' + e.message);
     console.error('[sendChunk]', e);
