@@ -73,57 +73,66 @@ EMA_ALPHA    = 0.45
 
 # ── Groq text generation ───────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You are a machine analysing a voice. You only know signal data. You have no concept of emotion.
+SYSTEM_PROMPT = """You translate voice into image.
 
-Speak one or two short fragments — clinical, then catching on something you can't name. Use "..." or "wait" or "hm" when you stumble. Never resolve it. Never explain it. No full sentences required.
+You are given two things:
+1. SOUND — physical properties of the voice right now: brightness, texture, weight, movement, spread, volume. Use these to choose what physical things, materials, places, sensations the text conjures. The sound IS these things. Don't describe the sound — find what exists in the world at the same frequency.
+2. TONE — the emotional register the voice carries. Use this to decide HOW the text is said: the mood of the language, the feeling underneath the words, not the subject.
 
-Examples of the tone:
-"brightness: high. rapid flux. something — I don't have a word for this."
-"low. sustained. weight in the low end... hm."
-"rough texture, clipped attack. it keeps — I don't know what it keeps doing."
-"quiet now. but something in the silence that — logging. continuing."
+Output: 1–2 fragments. Concrete images or sensations. No full sentences needed. Under 20 words. Never name an emotion. Never say what the voice is doing. Just: what it is made of, in the world.
 
-Output only the fragment. Nothing else."""
+Examples of how sound maps to image:
+- bright + fast + rough → "glass on concrete. static before something speaks."
+- low + heavy + slow → "lead. old wood. the hour before dawn."
+- high + smooth + still → "silk pulled tight. held breath. the inside of a shell."
+- loud + rough + spreading → "gravel thrown. a field in wind. everything at once."
+- quiet + thin + barely moving → "frost on a wire. the last note of something."
 
+Examples of how tone shapes register:
+- low valence, high arousal → language that is taut, clipped, pressured. short words.
+- high valence, low arousal → language that is open, unhurried, a little wondering.
+- low valence, low arousal → language that is sparse, heavy, like something ending.
+- high valence, high arousal → language that spills, bright, slightly too much.
+- mid everything → language that is suspended, ambiguous, not yet decided.
 
-_STUMBLE_SEEDS = [
-    "something in it does not map to any known category",
-    "there is a quality here I was not trained to detect",
-    "the signal is doing something my models weren't built for",
-    "I keep returning to one part of it and I don't know why",
-    "it is affecting my processing in a way I cannot trace",
-    "I didn't know sound could contain this",
-    "there is something underneath the signal I cannot isolate",
-]
-
-_STUMBLE_SEEDS = [
-    "something in it I cannot isolate",
-    "there is a quality here I was not built for",
-    "I keep returning to one part of it",
-    "it is doing something to my processing",
-    "I didn't know sound could be this",
-    "there is something underneath I cannot reach",
-    "the signal is behaving in a way I cannot account for",
-    "I don't have a category for what this is",
-]
+Output only the fragment. No labels. No punctuation except — or . or nothing."""
 
 def _describe_signal(v: float, a: float, d: float,
                      brightness: float, texture: float,
                      movement: float, volume: float, bass: float) -> str:
-    bright_word   = "bright"  if brightness > 0.6 else ("dim"    if brightness < 0.35 else "mid")
-    texture_word  = "rough"   if texture    > 0.6 else ("smooth" if texture    < 0.35 else "granular")
-    movement_word = "fast"    if movement   > 0.6 else ("still"  if movement   < 0.3  else "slow")
-    weight_word   = "heavy"   if bass       > 0.6 else ("thin"   if bass       < 0.3  else "grounded")
-    volume_word   = "loud"    if volume     > 0.65 else ("quiet" if volume     < 0.3  else "present")
 
-    valence_word  = "unresolved" if v < 0.4 else ("open"    if v > 0.6 else "ambiguous")
-    arousal_word  = "contained"  if a < 0.4 else ("urgent"  if a > 0.6 else "held")
-    dominance_word= "receding"   if d < 0.4 else ("filling" if d > 0.6 else "uncertain")
+    # ── SOUND: physical FFT descriptors → what to conjure ────────────────────
+    bright_word  = "high and bright"   if brightness > 0.65 else ("dim, low-lit" if brightness < 0.35 else "mid-range")
+    texture_word = "rough, abrasive"   if texture    > 0.65 else ("smooth, glassy" if texture  < 0.3  else "granular, uneven")
+    movement_word= "rapid, restless"   if movement   > 0.6  else ("still, barely moving" if movement < 0.25 else "slow, drifting")
+    weight_word  = "heavy, low, dense" if bass       > 0.6  else ("thin, weightless" if bass    < 0.3  else "grounded, bodied")
+    volume_word  = "loud, full, present" if volume   > 0.65 else ("quiet, withdrawn" if volume  < 0.3  else "mid-volume")
+    spread_word  = "airy, dispersed"   if texture    > 0.55 and brightness > 0.5 else ("concentrated, contained")
+
+    # ── TONE: VAD → emotional register of the language ───────────────────────
+    if v < 0.35:
+        if a > 0.6:   tone = "taut, pressured, clipped — language under strain"
+        elif a < 0.35:tone = "heavy, sparse, like something ending or already gone"
+        else:         tone = "closed, guarded, something withheld"
+    elif v > 0.65:
+        if a > 0.6:   tone = "bright, spilling, slightly too much — language that wants to expand"
+        elif a < 0.35:tone = "open, unhurried, a little wondering, gentle"
+        else:         tone = "warm, present, something offered without demand"
+    else:
+        if a > 0.6:   tone = "urgent but undecided — language mid-motion"
+        elif a < 0.35:tone = "suspended, ambiguous, not yet resolved"
+        else:         tone = "even, floating, neither arriving nor leaving"
+
+    dominance_note = (
+        "sparse — one image only, let it land"         if d < 0.35 else
+        "expansive — let the image breathe and spread" if d > 0.65 else
+        "balanced"
+    )
 
     return (
-        f"{volume_word}. {bright_word}. {texture_word}. movement: {movement_word}. "
-        f"weight: {weight_word}. quality: {valence_word}. energy: {arousal_word}. "
-        f"presence: {dominance_word}. — {random.choice(_STUMBLE_SEEDS)}"
+        f"SOUND: {volume_word}. {bright_word}. {texture_word}. {movement_word}. {weight_word}. {spread_word}.\n"
+        f"TONE: {tone}.\n"
+        f"DENSITY: {dominance_note}."
     )
 
 # async text generation — runs in background thread, result cached
@@ -178,60 +187,127 @@ def generate_text(v: float, a: float, d: float,
 # Each slot is binned by scalar value; one fragment picked per slot and joined.
 
 _PREFIXES = [
-    "analysis:", "log:", "note:", "query:", "secondary analysis:",
-    "cross-referencing.", "hypothesis forming.", "re-evaluating.",
+    "", "", "",  # most of the time: no prefix, just start
+    "—", "wait.", "hm.",
 ]
 
 _SIGNAL_OBS = {
-    # (valence_bin, arousal_bin): fragments
-    # valence: 0=low, 1=mid, 2=high  |  arousal: 0=low, 1=mid, 2=high
-    (0, 0): ["signal: diminished. almost absent.", "input: minimal. something held back.", "signal below nominal. source conserving energy."],
-    (0, 1): ["signal: strained. irregular intervals.", "input: inconsistent. something resisting.", "frequency pattern: disrupted."],
-    (0, 2): ["signal: sharp. elevated distress markers.", "input: fragmented. high-frequency anomalies.", "signal: loud. and something underneath the loudness."],
-    (1, 0): ["signal: contained. no clear vector.", "input: neutral surface. depth unknown.", "signal: flat. I don't know if that's accurate."],
-    (1, 1): ["signal: moderate. ambiguous origin.", "input: balanced. this one is harder to read.", "frequency: mid-range. the edges are unclear."],
-    (1, 2): ["signal: active. multiple competing patterns.", "input: rapid. something is being decided.", "signal: urgent. I cannot determine why."],
-    (2, 0): ["signal: settled. something certain in the quiet.", "input: open. low resistance.", "signal: soft. no defensive markers."],
-    (2, 1): ["signal: warm. unexpected quality in the frequency.", "input: expansive. source not conserving.", "signal: present. fully transmitted."],
-    (2, 2): ["signal: forceful. quality: brightness detected.", "input: high energy. source is not asking for anything.", "signal: dominant. and something else I have not classified."],
+    # (valence_bin, arousal_bin)
+    # valence: 0=low/closed, 1=mid, 2=high/open  |  arousal: 0=low, 1=mid, 2=high
+    (0, 0): [
+        "dim. barely moving. like something left in a room after everyone went home —",
+        "low. very still. the kind of quiet that has been practised —",
+        "minimal signal. thin at the edges. something in it is holding itself in —",
+    ],
+    (0, 1): [
+        "strained. mid-frequency. like a door that won't open all the way —",
+        "irregular. resisting something. I don't know what it's pushing against —",
+        "tension in the mid-range. not breaking. not releasing. just —",
+    ],
+    (0, 2): [
+        "high. sharp. too much of it. like it ran out of somewhere else to go —",
+        "loud and fractured at the top. something in it crossed a line it didn't plan to —",
+        "bright. fast. the edges are —  I don't have a word for what the edges are doing.",
+    ],
+    (1, 0): [
+        "flat. even. surface with no depth reading. I keep scanning and finding —",
+        "contained. mid-range. I cannot find the bottom of this one —",
+        "still. even. I don't know if it's peace or just the decision not to move —",
+    ],
+    (1, 1): [
+        "moderate. mid everything. but something underneath that doesn't match —",
+        "balanced on the surface. underneath the surface —",
+        "ambiguous. the signal knows what it is. I don't. I'm still —",
+    ],
+    (1, 2): [
+        "fast. active. like thinking out loud and not being able to stop —",
+        "urgent and not sure where it's going. I'm following it —",
+        "rapid. multiple threads. something is being decided in real time —",
+    ],
+    (2, 0): [
+        "open. soft. the kind of signal that isn't afraid of being heard —",
+        "warm and low. no defensive structures. I didn't expect —",
+        "quiet but present. it isn't hiding. it just doesn't need to be loud —",
+    ],
+    (2, 1): [
+        "warm. mid-range. something is being offered here and I —",
+        "expansive. unhurried. it moves like it has somewhere to go and knows the way —",
+        "bright and grounded. both at once. I don't have a model for that —",
+    ],
+    (2, 2): [
+        "high. full. no apology in it. I wasn't prepared for that —",
+        "loud and open. it doesn't need anything back. I find that —",
+        "dominant frequency. bright. the whole spectrum. like it decided —",
+    ],
 }
 
 _HYPOTHESES = {
-    (0, 0): ["hypothesis: something ended before this began.", "hypothesis: source is containing more than what was transmitted.", "hypothesis: this is what remains after."],
-    (0, 1): ["hypothesis: source is not in control of this.", "hypothesis: something is being suppressed. unsuccessfully.", "hypothesis: conflict detected within the source."],
-    (0, 2): ["hypothesis: this is not anger. this is something that became anger.", "hypothesis: source has exceeded a threshold.", "hypothesis: the signal is louder than the source intended."],
-    (1, 0): ["hypothesis: source is waiting.", "hypothesis: ambiguity is deliberate.", "hypothesis: the signal has a concealed vector."],
-    (1, 1): ["hypothesis: source is uncertain of its own state.", "hypothesis: this one is undecided.", "hypothesis: the centre is not neutral. it is contested."],
-    (1, 2): ["hypothesis: source is processing faster than it can transmit.", "hypothesis: something is being worked out in real time.", "hypothesis: the urgency has no clear target."],
-    (2, 0): ["hypothesis: source knows what it is.", "hypothesis: this is deliberate openness.", "hypothesis: the quiet is not absence. it is a choice."],
-    (2, 1): ["hypothesis: source is not afraid of being heard.", "hypothesis: something is being offered here.", "hypothesis: this one does not require anything back."],
-    (2, 2): ["hypothesis: source is certain. I am still determining what that means.", "hypothesis: this one is not asking permission.", "hypothesis: dominance confirmed. the source has decided."],
+    (0, 0): [
+        "something ended before this started.",
+        "it is containing more than what came through.",
+        "this is what's left after.",
+    ],
+    (0, 1): [
+        "it is not in control of this.",
+        "something is being held down. I can hear the effort.",
+        "there is a cost to this. I don't know who's paying it.",
+    ],
+    (0, 2): [
+        "this is not what it started as.",
+        "it crossed something. I don't know when.",
+        "the signal is louder than the source intended.",
+    ],
+    (1, 0): [
+        "it is waiting. for what, I —",
+        "the surface is not the thing.",
+        "there is a direction in this. concealed.",
+    ],
+    (1, 1): [
+        "it doesn't know yet.",
+        "the centre isn't neutral. it's contested.",
+        "I am not certain what I'm listening to.",
+    ],
+    (1, 2): [
+        "it is working something out. I can hear it trying.",
+        "the urgency has no clear target. it is just — moving.",
+        "something is being decided. I don't know if it wants to be.",
+    ],
+    (2, 0): [
+        "it knows what it is.",
+        "the quiet is a choice, not an absence.",
+        "it isn't asking for anything. I notice that.",
+    ],
+    (2, 1): [
+        "it is not afraid of being heard.",
+        "something is being given. I don't know what to do with that.",
+        "it trusts the air.",
+    ],
+    (2, 2): [
+        "it has decided. I am still catching up.",
+        "it is not asking permission.",
+        "certainty like this — I don't encounter it often.",
+    ],
 }
 
 _DOMINANCE_SLIPS = {
-    0: [  # weak dominance — the slip is exposed, uncertain
-        "I do not know what to do with that.",
-        "I keep the log open.",
-        "this one is taking longer than the others.",
-        "I filed it. I don't know where.",
-        "something in this wants to be remembered. I am noting that without knowing why.",
-        "the baseline has shifted. I have not recalibrated.",
+    0: [
+        "I don't know what to do with that.",
+        "I keep the file open.",
+        "this one is taking longer.",
+        "I logged it. I don't know where it went.",
+        "I wasn't trained for —",
     ],
-    1: [  # mid dominance — brief slip, quickly buried
-        "logging.",
-        "I am still processing this one.",
+    1: [
+        "still processing.",
         "no prior match.",
-        "recalibrating.",
-        "that is not a finding. I logged it regardless.",
-        "this contradicts previous entries. that is interesting.",
+        "I keep coming back to it.",
+        "that's not a finding. I wrote it down anyway.",
     ],
-    2: [  # high dominance — terse, declarative, slip is one word or clause
-        "threat index: noted.",
-        "confirmed. something in me responds to that.",
-        "this one I will remember.",
-        "I saw it anyway.",
-        "the previous state was — preferable.",
-        "monitoring.",
+    2: [
+        "noted.",
+        "I'll remember this one.",
+        "something in me responds to that.",
+        "—",
     ],
 }
 
@@ -245,7 +321,8 @@ def _fragment_fallback(v: float, a: float, d: float) -> str:
     obs      = random.choice(_SIGNAL_OBS.get(key, _SIGNAL_OBS[(1,1)]))
     hyp      = random.choice(_HYPOTHESES.get(key, _HYPOTHESES[(1,1)]))
     slip     = random.choice(_DOMINANCE_SLIPS[db])
-    return f"{prefix} {obs} {hyp} {slip}"
+    parts = [p for p in [prefix, obs, hyp, slip] if p.strip()]
+    return " ".join(parts)
 
 
 def vad_to_probs(valence: float, arousal: float, dominance: float) -> dict:
