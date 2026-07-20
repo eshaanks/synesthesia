@@ -1,12 +1,21 @@
 // ── WebGL setup ───────────────────────────────────────────────────────────────
 const canvas   = document.getElementById('glCanvas');
-const RENDER_W = 960;
-const RENDER_H = 600;
+let RENDER_W = 1280;
+let RENDER_H = 720;
 canvas.width   = RENDER_W;
 canvas.height  = RENDER_H;
 
 const gl = canvas.getContext('webgl');
 gl.viewport(0, 0, RENDER_W, RENDER_H);
+
+// called from UI to change render resolution without reload
+window.setResolution = function(w, h){
+  RENDER_W = w; RENDER_H = h;
+  canvas.width  = w; canvas.height = h;
+  gl.viewport(0, 0, w, h);
+  gl.useProgram(prog);
+  gl.uniform2f(U.resolution, w, h);
+};
 
 // ── vertex shader (shared) ────────────────────────────────────────────────────
 const VS = `
@@ -27,11 +36,9 @@ void main(){
 //   u_bassRatio  bass/treble ratio 0-1   → warp depth
 //   u_rotSpeed   F0-derived rotation     → pattern rotation speed
 //
-// Layer 2 — emotion uniforms (every ~2s from wav2vec2-emotion server):
-//   u_neu  0-1  neutral probability
-//   u_hap  0-1  happy probability
-//   u_ang  0-1  angry probability
-//   u_sad  0-1  sad probability
+// Layer 2 — VAD + colour wheel (every ~2s from WavLM server):
+//   u_valence/u_arousal  live VAD position → samples the 4-pole colour field
+//   u_r[0-5]pos/rad/col0/col1  6 draggable palette regions in VAD space
 
 const FS_RORSCHACH = `
 precision highp float;
@@ -50,14 +57,24 @@ uniform float u_volume;       // RMS energy — loudness
 uniform float u_bass;         // bass/treble ratio — low end vs high end
 uniform float u_pitch;        // F0 estimate — fundamental frequency
 
-// emotion layer — raw VAD position drives the 2D colour wheel directly
+// VAD position (from model)
 uniform float u_valence;     // 0=negative → 1=positive
 uniform float u_arousal;     // 0=calm → 1=active
 
-// colour wheel controls
-uniform float u_colorRadius; // 0=tight solid colour, 1=wide hue family sweep
-uniform float u_hueShift;    // 0-1 global hue rotation of the whole wheel
-uniform int   u_palette;     // 0=Vivid 1=Neon 2=Ember 3=Dusk 4=Mono
+// 6 emotion regions — hard-edged circles in VAD space
+// each region has 3 flat colours; ink noise picks which colour is visible at each point
+// pos=(valence,arousal), rad=radius in VAD space (scaled by u_colorRadius)
+uniform vec2  u_r0pos; uniform float u_r0rad; uniform vec3 u_r0col0; uniform vec3 u_r0col1; uniform vec3 u_r0col2; // sad
+uniform vec2  u_r1pos; uniform float u_r1rad; uniform vec3 u_r1col0; uniform vec3 u_r1col1; uniform vec3 u_r1col2; // happy
+uniform vec2  u_r2pos; uniform float u_r2rad; uniform vec3 u_r2col0; uniform vec3 u_r2col1; uniform vec3 u_r2col2; // angry
+uniform vec2  u_r3pos; uniform float u_r3rad; uniform vec3 u_r3col0; uniform vec3 u_r3col1; uniform vec3 u_r3col2; // happy+aroused
+uniform vec2  u_r4pos; uniform float u_r4rad; uniform vec3 u_r4col0; uniform vec3 u_r4col1; uniform vec3 u_r4col2; // dominant aroused
+uniform vec2  u_r5pos; uniform float u_r5rad; uniform vec3 u_r5col0; uniform vec3 u_r5col1; uniform vec3 u_r5col2; // calm
+
+// global colour modifiers (routable to FFT)
+uniform float u_colorRadius; // multiplier on all region radii
+uniform float u_hueShift;    // slides noise thresholds — rotates which colour patch dominates
+uniform float u_colorBand;   // 0-1: split between band0 and band1 (0.5=equal thirds)
 
 // FFT shape param
 uniform float u_spread;      // how wide/open the blob arms splay
@@ -87,8 +104,9 @@ float vnoise(vec2 p){
 }
 
 // domain-warped noise — warp depth driven by bass, mutation by flux
+// u_time is already pre-scaled by speed in JS, so no multiply here
 float inkNoise(vec2 p, float warpDepth, float mutRate){
-  float t  = u_time * u_speed * (0.02 + mutRate * 0.5);
+  float t  = u_time * (0.02 + mutRate * 0.5);
   vec2  q  = vec2(vnoise(p + vec2(0.0, 0.0) + t),
                   vnoise(p + vec2(5.2, 1.3) + t));
   vec2  r  = vec2(vnoise(p + warpDepth * q + vec2(1.7, 9.2) + t * 0.7),
@@ -100,73 +118,45 @@ float inkNoise(vec2 p, float warpDepth, float mutRate){
   return vnoise(p + 3.0*q + 2.0*r + s) + detail * 0.35;
 }
 
-// ── HSV ↔ RGB helpers ────────────────────────────────────────────────────────
-vec3 hsv2rgb(vec3 c){
-  vec3 p = abs(fract(c.xxx + vec3(0.0,2.0/3.0,1.0/3.0)) * 6.0 - 3.0);
-  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
-}
+// ── seamless colour field ────────────────────────────────────────────────────
+// 6 VAD regions, each with 3 colours.
+// n (0-1, slow coarse noise) smoothly mixes between the 3 colours — no thresholds.
+// u_colorBand controls spread: 0=only col0, 1=full sweep col0→col1→col2.
+// u_hueShift rotates the phase of n so the colour cycle shifts.
+// Winner-takes-all on nearest VAD region — no inter-region colour blending.
+vec3 colourField(float v, float a, float n){
+  vec2 vadPos = vec2(v, a);
 
-// ── palette hue anchors ───────────────────────────────────────────────────────
-// Each palette defines 4 anchor hues (0-1) for [anger, happy, sad, calm].
-// At the periphery of each quadrant the colour lands exactly on that hue.
-// Moving toward centre the hues blend, and u_colorRadius sweeps hue within
-// each family so adjacent pixels show different related hues (not flat).
-//
-// Palette 0 — Vivid   : crimson / gold / indigo / sage
-// Palette 1 — Neon    : magenta / cyan / violet / lime
-// Palette 2 — Ember   : burnt-orange / amber / dark-teal / rose
-// Palette 3 — Dusk    : blood-red / coral / midnight / lavender
-// Palette 4 — Mono    : red-grey / warm-white / cool-grey / mid-grey
+  vec2  rpos[6]; float rrad[6];
+  vec3  rc0[6];  vec3  rc1[6];  vec3  rc2[6];
 
-vec4 paletteHues(){
-  // returns vec4(angHue, hapHue, sadHue, calmHue) in 0-1 hue space
-  if(u_palette == 1) return vec4(0.83, 0.50, 0.75, 0.33); // neon
-  if(u_palette == 2) return vec4(0.06, 0.12, 0.48, 0.93); // ember
-  if(u_palette == 3) return vec4(0.00, 0.05, 0.63, 0.74); // dusk
-  if(u_palette == 4) return vec4(0.00, 0.10, 0.58, 0.35); // mono (low sat)
-  return vec4(0.00, 0.14, 0.65, 0.38);                    // vivid (default)
-}
+  rpos[0]=u_r0pos; rrad[0]=max(u_r0rad*u_colorRadius,0.01); rc0[0]=u_r0col0; rc1[0]=u_r0col1; rc2[0]=u_r0col2;
+  rpos[1]=u_r1pos; rrad[1]=max(u_r1rad*u_colorRadius,0.01); rc0[1]=u_r1col0; rc1[1]=u_r1col1; rc2[1]=u_r1col2;
+  rpos[2]=u_r2pos; rrad[2]=max(u_r2rad*u_colorRadius,0.01); rc0[2]=u_r2col0; rc1[2]=u_r2col1; rc2[2]=u_r2col2;
+  rpos[3]=u_r3pos; rrad[3]=max(u_r3rad*u_colorRadius,0.01); rc0[3]=u_r3col0; rc1[3]=u_r3col1; rc2[3]=u_r3col2;
+  rpos[4]=u_r4pos; rrad[4]=max(u_r4rad*u_colorRadius,0.01); rc0[4]=u_r4col0; rc1[4]=u_r4col1; rc2[4]=u_r4col2;
+  rpos[5]=u_r5pos; rrad[5]=max(u_r5rad*u_colorRadius,0.01); rc0[5]=u_r5col0; rc1[5]=u_r5col1; rc2[5]=u_r5col2;
 
-vec2 paletteSatRange(){
-  // returns vec2(satAtPeriphery, satAtCentre) — mono is desaturated
-  if(u_palette == 4) return vec2(0.25, 0.05);
-  return vec2(0.92, 0.18);
-}
+  // smooth 3-colour mix: t sweeps col0→col1→col2 with no hard cuts
+  float t = fract(n + u_hueShift) * u_colorBand;
+  #define SMIX(c0,c1,c2) (t < 0.5 ? mix(c0, c1, t*2.0) : mix(c1, c2, (t-0.5)*2.0))
 
-// ── 2D VAD colour field ────────────────────────────────────────────────────────
-// VAD coordinate → HSV colour.
-// The hue is bilinearly interpolated from the 4 quadrant anchors.
-// u_colorRadius controls how far the per-pixel ink noise can push the hue
-// within the local colour family — 0=solid, 1=wide painterly sweep.
-vec3 vadColor(float v, float a, float inkNoise0, float inkNoise1){
-  vec4  hues    = paletteHues();
-  vec2  satR    = paletteSatRange();
+  // nearest-region always wins — no hard radius cutoff so colour never goes black
+  // u_colorRadius softens the distance weighting: low=sharp region edges, high=blended
+  float bestScore = -1.0;
+  vec3  bestCol   = vec3(0.0);
+  float d; float score;
 
-  // bilinear hue blend across V×A grid
-  // low-arousal row: sad(lowV) → calm(highV)
-  // high-arousal row: anger(lowV) → happy(highV)
-  float loHue = mix(hues.z, hues.w, v);
-  float hiHue = mix(hues.x, hues.y, v);
-  float baseHue = mix(loHue, hiHue, a);
+  d=length(vadPos-rpos[0]); score=1.0/(d/max(u_colorRadius,0.01)+0.001); if(score>bestScore){ bestScore=score; bestCol=SMIX(rc0[0],rc1[0],rc2[0]); }
+  d=length(vadPos-rpos[1]); score=1.0/(d/max(u_colorRadius,0.01)+0.001); if(score>bestScore){ bestScore=score; bestCol=SMIX(rc0[1],rc1[1],rc2[1]); }
+  d=length(vadPos-rpos[2]); score=1.0/(d/max(u_colorRadius,0.01)+0.001); if(score>bestScore){ bestScore=score; bestCol=SMIX(rc0[2],rc1[2],rc2[2]); }
+  d=length(vadPos-rpos[3]); score=1.0/(d/max(u_colorRadius,0.01)+0.001); if(score>bestScore){ bestScore=score; bestCol=SMIX(rc0[3],rc1[3],rc2[3]); }
+  d=length(vadPos-rpos[4]); score=1.0/(d/max(u_colorRadius,0.01)+0.001); if(score>bestScore){ bestScore=score; bestCol=SMIX(rc0[4],rc1[4],rc2[4]); }
+  d=length(vadPos-rpos[5]); score=1.0/(d/max(u_colorRadius,0.01)+0.001); if(score>bestScore){ bestScore=score; bestCol=SMIX(rc0[5],rc1[5],rc2[5]); }
 
-  // distance from VAD centre → 0 at centre, 1 at extreme periphery
-  float vadDist = clamp(length(vec2(v, a) - vec2(0.5, 0.4)) * 2.2, 0.0, 1.0);
+  #undef SMIX
 
-  // hue neighbourhood: ink noise offsets hue by up to colorRadius * bandwidth
-  // bandwidth scales with distance — periphery is tighter (strong identity),
-  // centre is wider (more colour variety in the blend zone)
-  float bandwidth = 0.10 + (1.0 - vadDist) * 0.18;
-  float hueJitter = (inkNoise0 - 0.5) * 2.0 * u_colorRadius * bandwidth;
-  // secondary noise layer for extra organic variation
-  float hueJitter2 = (inkNoise1 - 0.5) * u_colorRadius * bandwidth * 0.4;
-  float hue = fract(baseHue + hueJitter + hueJitter2 + u_hueShift);
-
-  // saturation: strong at periphery, open/varied near centre
-  float sat = mix(satR.y, satR.x, smoothstep(0.0, 1.0, vadDist));
-  // radius also slightly desaturates to let hue variety read
-  sat *= (1.0 - u_colorRadius * 0.25);
-
-  return vec3(hue, sat, 1.0); // value filled in later (brightness from ink)
+  return bestCol;
 }
 
 void main(){
@@ -184,66 +174,46 @@ void main(){
 
   // ── bilateral symmetry ────────────────────────────────────────────────────
   vec2 uvL = vec2(-abs(uv.x), uv.y);
-  vec2 uvR = vec2( abs(uv.x), uv.y);
 
   float baseScale = max(u_blobSize, 0.1);
   vec2 pL = uvL * baseScale;
-  vec2 pR = uvR * baseScale;
 
   // warp depth — 0=almost no warp (clean geometric), 1=heavily folded organic mess
   float warpDepth = 0.3 + u_bass * 9.0;
 
-  float inkL = inkNoise(pL, warpDepth, u_movement);
-  float inkR = inkNoise(pR, warpDepth, u_movement);
+  // tone: 0=tight form, 1=slightly softer edge
+  float thresh = 0.64 - u_tone * 0.18;
+  float edgeW  = 0.03 + u_tone * 0.05;
 
-  // tone: 0=tight crisp edge (structured), 1=dissolved filamentous (noisy/organic)
-  // threshold shift spreads the shape from compact blob → diffuse cloud
-  float thresh = 0.62 - u_tone * 0.30;
-  float edge   = 0.02 + u_tone * 0.12;
-  float bodyL  = smoothstep(thresh + edge, thresh - edge, inkL);
-  float bodyR  = smoothstep(thresh + edge, thresh - edge, inkR);
+  // single ink field — shape as before
+  float ink = inkNoise(pL, warpDepth, u_movement);
 
-  // satellite lobes — threshold uses same tone-driven thresh so they dissolve together
-  vec2 pL2 = uvL * baseScale * 1.8 + vec2(2.3, 4.1);
-  vec2 pR2 = uvR * baseScale * 1.8 + vec2(2.3, 4.1);
-  float lobesL = smoothstep(thresh + edge, thresh - edge, inkNoise(pL2, warpDepth*0.6, u_movement*0.5)) * 0.65;
-  float lobesR = smoothstep(thresh + edge, thresh - edge, inkNoise(pR2, warpDepth*0.6, u_movement*0.5)) * 0.65;
+  // colour noise: very coarse scale + very slow drift → smooth colour wash
+  // across the form with no visible frequency / contour lines
+  float colNoise = vnoise(pL * 0.18 + vec2(3.1, 7.6) + u_time * 0.008);
+  vec3  col      = colourField(u_valence, u_arousal, colNoise);
 
-  float shape = clamp(bodyL + lobesL, 0.0, 1.0);
-  float ink   = inkL;
+  // soft narrow band: lit inside, black outside — like a neon tube
+  float density = smoothstep(thresh - edgeW, thresh + edgeW, ink);
 
-  // ── gloss ─────────────────────────────────────────────────────────────────
-  float eps    = 0.018;
-  float dx     = inkNoise(pL + vec2(eps,0.0), warpDepth, u_movement)
-               - inkNoise(pL - vec2(eps,0.0), warpDepth, u_movement);
-  float dy     = inkNoise(pL + vec2(0.0,eps), warpDepth, u_movement)
-               - inkNoise(pL - vec2(0.0,eps), warpDepth, u_movement);
-  vec2  nrm    = normalize(vec2(dx,dy) + 0.001);
-  vec2  ldir   = normalize(vec2(sin(u_time*0.07), cos(u_time*0.05)));
-  float spec   = pow(max(dot(nrm, ldir), 0.0), 20.0);
-  float gloss  = spec * (1.0 - clamp(abs(ink-thresh)/0.07*0.8,0.0,1.0)) * shape * 0.5;
+  // glass highlight: the very peak of the form reads slightly brighter/whiter
+  float core = pow(clamp((ink - thresh) / 0.07 + 0.5, 0.0, 1.0), 3.0) * 0.4;
 
-  // ── HSV colour field sampled at VAD position ─────────────────────────────
-  // Two independent noise samples for hue jitter — use different offsets
-  // so spatial hue variation is uncorrelated with the shape threshold noise.
-  float inkN0 = inkNoise(pL + vec2(3.7, 8.1), warpDepth * 0.5, u_movement * 0.6);
-  float inkN1 = inkNoise(pL + vec2(11.3, 2.9), warpDepth * 0.4, u_movement * 0.4);
+  // specular: single slow-moving glint across the surface
+  float eps  = 0.022;
+  float dx   = inkNoise(pL + vec2(eps,0.0), warpDepth, u_movement)
+             - inkNoise(pL - vec2(eps,0.0), warpDepth, u_movement);
+  float dy   = inkNoise(pL + vec2(0.0,eps), warpDepth, u_movement)
+             - inkNoise(pL - vec2(0.0,eps), warpDepth, u_movement);
+  vec2  nrm  = normalize(vec2(dx, dy) + 0.001);
+  vec2  ldir = normalize(vec2(sin(u_time * 0.05), cos(u_time * 0.04)));
+  float spec = pow(max(dot(nrm, ldir), 0.0), 22.0) * density * 0.35;
 
-  vec3 hsv = vadColor(u_valence, u_arousal, inkN0, inkN1);
+  vec3 lit    = col * (density + core) + vec3(0.85, 0.92, 1.0) * spec;
+  vec3 inkHue = lit;
 
-  // brightness from main ink noise — shadow areas are dark, highlights vivid
-  float bri = clamp(ink * 1.5 - 0.15, 0.0, 1.0);
-  // ramp: shadow pixels go very dark, highlights go full bright
-  float briVal = bri * bri * 0.35 + bri * 0.65;
-  hsv.z = briVal;
-
-  vec3 blended = hsv2rgb(hsv);
-
-  vec3  inkHue = blended * shape * 1.3;
-  inkHue      += blended * 0.5 * (lobesL + lobesR) * 0.5;
-
-  // volume: 0=dark/dim, 1=blown out bright
-  float bright = 0.3 + u_volume * 1.8;
+  // volume gates brightness — quiet=dim, loud=full neon, never whites out
+  float bright = 0.15 + u_volume * 0.95;
   inkHue      *= bright;
 
   // ── vignette ──────────────────────────────────────────────────────────────
@@ -305,12 +275,26 @@ const U = {
   volume:       gl.getUniformLocation(prog, 'u_volume'),
   bass:         gl.getUniformLocation(prog, 'u_bass'),
   spread:       gl.getUniformLocation(prog, 'u_spread'),
-  // VAD colour wheel
+  // VAD position
   valence:      gl.getUniformLocation(prog, 'u_valence'),
   arousal:      gl.getUniformLocation(prog, 'u_arousal'),
+  // 6 palette regions — pos/rad/col0/col1 per region
+  r0pos: gl.getUniformLocation(prog,'u_r0pos'), r0rad: gl.getUniformLocation(prog,'u_r0rad'),
+  r0col0:gl.getUniformLocation(prog,'u_r0col0'),r0col1:gl.getUniformLocation(prog,'u_r0col1'),r0col2:gl.getUniformLocation(prog,'u_r0col2'),
+  r1pos: gl.getUniformLocation(prog,'u_r1pos'), r1rad: gl.getUniformLocation(prog,'u_r1rad'),
+  r1col0:gl.getUniformLocation(prog,'u_r1col0'),r1col1:gl.getUniformLocation(prog,'u_r1col1'),r1col2:gl.getUniformLocation(prog,'u_r1col2'),
+  r2pos: gl.getUniformLocation(prog,'u_r2pos'), r2rad: gl.getUniformLocation(prog,'u_r2rad'),
+  r2col0:gl.getUniformLocation(prog,'u_r2col0'),r2col1:gl.getUniformLocation(prog,'u_r2col1'),r2col2:gl.getUniformLocation(prog,'u_r2col2'),
+  r3pos: gl.getUniformLocation(prog,'u_r3pos'), r3rad: gl.getUniformLocation(prog,'u_r3rad'),
+  r3col0:gl.getUniformLocation(prog,'u_r3col0'),r3col1:gl.getUniformLocation(prog,'u_r3col1'),r3col2:gl.getUniformLocation(prog,'u_r3col2'),
+  r4pos: gl.getUniformLocation(prog,'u_r4pos'), r4rad: gl.getUniformLocation(prog,'u_r4rad'),
+  r4col0:gl.getUniformLocation(prog,'u_r4col0'),r4col1:gl.getUniformLocation(prog,'u_r4col1'),r4col2:gl.getUniformLocation(prog,'u_r4col2'),
+  r5pos: gl.getUniformLocation(prog,'u_r5pos'), r5rad: gl.getUniformLocation(prog,'u_r5rad'),
+  r5col0:gl.getUniformLocation(prog,'u_r5col0'),r5col1:gl.getUniformLocation(prog,'u_r5col1'),r5col2:gl.getUniformLocation(prog,'u_r5col2'),
+  // global colour modifiers
   colorRadius:  gl.getUniformLocation(prog, 'u_colorRadius'),
   hueShift:     gl.getUniformLocation(prog, 'u_hueShift'),
-  palette:      gl.getUniformLocation(prog, 'u_palette'),
+  colorBand:    gl.getUniformLocation(prog, 'u_colorBand'),
   // global mood params
   colorTemp:    gl.getUniformLocation(prog, 'u_colorTemp'),
   speed:        gl.getUniformLocation(prog, 'u_speed'),
@@ -319,7 +303,7 @@ const U = {
   saturation:   gl.getUniformLocation(prog, 'u_saturation'),
 };
 
-gl.uniform2f(U.resolution,   RENDER_W, RENDER_H);
+gl.uniform2f(U.resolution, RENDER_W, RENDER_H);
 gl.uniform1f(U.brightness,   0.5);
 gl.uniform1f(U.tone,         0.3);
 gl.uniform1f(U.movement,     0.2);
@@ -327,12 +311,34 @@ gl.uniform1f(U.texture,      0.2);
 gl.uniform1f(U.volume,       0.3);
 gl.uniform1f(U.bass,         0.5);
 gl.uniform1f(U.spread,       0.5);
-// VAD defaults — start at calm-neutral centre so shader has colour from frame 1
-gl.uniform1f(U.valence,      0.5);
-gl.uniform1f(U.arousal,      0.4);
-gl.uniform1f(U.colorRadius,  0.45);
-gl.uniform1f(U.hueShift,     0.0);
-gl.uniform1i(U.palette,      0);
+// VAD position defaults
+gl.uniform1f(U.valence,     0.5);
+gl.uniform1f(U.arousal,     0.4);
+// helper: hex #rrggbb → [r,g,b] floats 0-1
+function hex3(h){ return [parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255]; }
+function setRegion(n, x,y, rad, c0,c1,c2){
+  gl.uniform2f(U[`r${n}pos`], x, y);
+  gl.uniform1f(U[`r${n}rad`], rad);
+  const [r0,g0,b0]=hex3(c0); gl.uniform3f(U[`r${n}col0`],r0,g0,b0);
+  const [r1,g1,b1]=hex3(c1); gl.uniform3f(U[`r${n}col1`],r1,g1,b1);
+  const [r2,g2,b2]=hex3(c2); gl.uniform3f(U[`r${n}col2`],r2,g2,b2);
+}
+// R0 Sad        — neon blue / electric cyan / violet
+setRegion(0, 0.15,0.20, 0.50, '#0000ff','#00eeff','#cc00ff');
+// R1 Happy      — neon yellow / hot lime / gold
+setRegion(1, 0.85,0.65, 0.50, '#ffee00','#aaff00','#ff9900');
+// R2 Angry      — neon red / hot orange / magenta-red
+setRegion(2, 0.15,0.82, 0.48, '#ff0000','#ff5500','#ff0066');
+// R3 Happy+Aroused — neon orange / electric yellow / lime
+setRegion(3, 0.78,0.88, 0.40, '#ff6600','#ffdd00','#88ff00');
+// R4 Dominant Aroused — neon magenta / hot pink / electric purple
+setRegion(4, 0.48,0.92, 0.34, '#ff00cc','#ff44ff','#8800ff');
+// R5 Calm       — neon green / electric teal / cyan
+setRegion(5, 0.68,0.12, 0.30, '#00ff44','#00ffcc','#00aaff');
+// global colour modifiers
+gl.uniform1f(U.colorRadius, 1.0);
+gl.uniform1f(U.hueShift,    0.0);
+gl.uniform1f(U.colorBand,   0.7);
 // global mood param defaults
 gl.uniform1f(U.colorTemp,   0.5);
 gl.uniform1f(U.speed,       1.0);

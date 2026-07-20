@@ -1,5 +1,8 @@
 let stream, recording = false;
-let questionActive = false;
+let _chunkCount = 0;
+
+window.GROQ_EVERY   = 1;     // show text every N chunks (1 = every chunk)
+window.GROQ_HOLD_MS = 6000;  // ms before text fades
 
 async function toggleMic(){
   const btn = document.getElementById('micBtn');
@@ -25,24 +28,28 @@ async function toggleMic(){
   }
 }
 
+// Recording loop is fully decoupled from the fetch — each recorder fires and
+// immediately starts the next one. Sends run in parallel; back-pressure from
+// the server never delays the next recording window.
 function startChunking(){
-  function recordAndSend(){
+  function nextChunk(){
     if(!recording) return;
     const recorder = new MediaRecorder(stream);
     const chunks   = [];
     recorder.ondataavailable = e => { if(e.data.size > 0) chunks.push(e.data); };
-    recorder.onstop = async () => {
+    recorder.onstop = () => {
+      // start next recording immediately — don't wait for the fetch
+      nextChunk();
       if(chunks.length > 0){
-        await sendChunk(new Blob(chunks, { type:'audio/webm' }));
+        sendChunk(new Blob(chunks, { type:'audio/webm' }));  // fire and forget
       }
-      if(recording) recordAndSend();
     };
     recorder.start();
     setTimeout(() => {
       if(recorder.state === 'recording') recorder.stop();
     }, CONFIG.CHUNK_MS);
   }
-  recordAndSend();
+  nextChunk();
 }
 
 async function sendChunk(blob){
@@ -53,23 +60,21 @@ async function sendChunk(blob){
     const data = await res.json();
     if(data.error){ log('server error: ' + data.error); return; }
 
-    // store raw response for debug bar
     window._lastServerResponse = data;
     window._lastServerTime = Date.now();
 
     console.log('[emotion]', data.emotion, data.probs, 'vad:', data.vad);
 
-    // update emotion probabilities — index.html routes these to visuals
     if(data.probs) window.updateFromEmotion(data.probs);
 
-    // push raw VAD position into the 2D colour wheel
     if(data.vad && window.vadTarget){
-      window.vadTarget.v = data.vad[0];  // valence
-      window.vadTarget.a = data.vad[1];  // arousal
+      window.vadTarget.v = data.vad[0];
+      window.vadTarget.a = data.vad[1];
     }
 
-    // show question from server if present
-    if(data.question) showQuestion(data.question);
+    _chunkCount++;
+    const every = (window.GROQ_EVERY > 0) ? window.GROQ_EVERY : 1;
+    if(data.question && (_chunkCount % every === 0)) showQuestion(data.question);
 
     const top = data.emotion_word || data.emotion || '?';
     const probStr = data.probs
@@ -82,23 +87,147 @@ async function sendChunk(blob){
   }
 }
 
-let _questionTimer = null;
+// ── typewriter text display — canvas-based, zero DOM reflow ──────────────────
+// Text is drawn onto a 2D canvas overlay. No DOM textContent writes,
+// no layout invalidation, no reflow. Opacity is simulated via globalAlpha.
+const TYPE_CHAR_MS = 48;
+const TEXT_FONT    = '300 22px "Inter", sans-serif';
+const TEXT_COLOR   = 'rgba(255,255,255,0.88)';
+const TEXT_SHADOW_BLUR  = 24;
+const TEXT_SHADOW_COLOR = 'rgba(0,0,0,0.95)';
+
+let _typeBusy    = false;
+let _typePending = null;
+let _typeText    = '';
+let _typePos     = 0;
+let _typeAccumMs = 0;
+let _typePauseMs = 0;
+let _typeLastTs  = 0;
+let _typePhase   = 'idle';   // 'typing' | 'holding' | 'fading' | 'idle'
+let _typeHoldEnd = 0;
+let _typeFadeEnd = 0;
+let _typeAlpha   = 1;
+let _textCanvas  = null;
+let _textCtx     = null;
+
+function _getCtx(){
+  if(_textCtx) return _textCtx;
+  _textCanvas = document.getElementById('textCanvas');
+  if(!_textCanvas) return null;
+  _textCtx = _textCanvas.getContext('2d');
+  return _textCtx;
+}
+
+function _textDraw(alpha){
+  const ctx = _getCtx();
+  if(!ctx || !_textCanvas) return;
+
+  // match canvas pixel size to display size
+  const W = _textCanvas.offsetWidth  || window.innerWidth;
+  const H = _textCanvas.offsetHeight || window.innerHeight;
+  if(_textCanvas.width !== W || _textCanvas.height !== H){
+    _textCanvas.width  = W;
+    _textCanvas.height = H;
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  if(!_typeText || _typePos === 0 || alpha <= 0) return;
+
+  const visible = _typeText.slice(0, _typePos);
+  ctx.globalAlpha     = alpha;
+  ctx.font            = TEXT_FONT;
+  ctx.textAlign       = 'center';
+  ctx.textBaseline    = 'middle';
+  ctx.shadowBlur      = TEXT_SHADOW_BLUR;
+  ctx.shadowColor     = TEXT_SHADOW_COLOR;
+  ctx.fillStyle       = TEXT_COLOR;
+
+  // simple word-wrap at max 900px width
+  const maxW   = Math.min(900, W * 0.8);
+  const lineH  = 36;
+  const words  = visible.split(' ');
+  const lines  = [];
+  let line     = '';
+  for(const w of words){
+    const test = line ? line + ' ' + w : w;
+    if(ctx.measureText(test).width > maxW && line){
+      lines.push(line);
+      line = w;
+    } else {
+      line = test;
+    }
+  }
+  if(line) lines.push(line);
+
+  const totalH = lines.length * lineH;
+  const startY = H * 0.78 - totalH / 2;   // ~78% down the screen
+  ctx.shadowBlur = 24;
+  for(let i = 0; i < lines.length; i++){
+    ctx.fillText(lines[i], W / 2, startY + i * lineH);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// driven by rAF loop in transition.js
+window._onTypeFrame = function(ts){
+  if(_typePhase === 'idle') return;
+
+  const dt = _typeLastTs ? Math.min(ts - _typeLastTs, 100) : 16;
+  _typeLastTs = ts;
+
+  if(_typePhase === 'typing'){
+    _typeAccumMs += dt;
+    const charMs = _typePauseMs > 0 ? _typePauseMs : TYPE_CHAR_MS;
+    if(_typeAccumMs >= charMs){
+      _typeAccumMs = 0;
+      _typePauseMs = 0;
+      if(_typePos < _typeText.length){
+        const ch = _typeText[_typePos++];
+        if(ch === '.' || ch === ':') _typePauseMs = TYPE_CHAR_MS * 3;
+        else if(ch === ',')          _typePauseMs = TYPE_CHAR_MS * 1.5;
+      } else {
+        const holdMs = (window.GROQ_HOLD_MS > 0) ? window.GROQ_HOLD_MS : 6000;
+        _typeHoldEnd = ts + holdMs;
+        _typePhase   = 'holding';
+      }
+    }
+    _typeAlpha = 1;
+    _textDraw(_typeAlpha);
+
+  } else if(_typePhase === 'holding'){
+    if(ts >= _typeHoldEnd){
+      _typeFadeEnd = ts + 1000;
+      _typePhase   = 'fading';
+    }
+
+  } else if(_typePhase === 'fading'){
+    const progress = (ts - (_typeFadeEnd - 1000)) / 1000;
+    _typeAlpha = Math.max(0, 1 - progress);
+    _textDraw(_typeAlpha);
+    if(ts >= _typeFadeEnd){
+      _textDraw(0);
+      _typePhase = 'idle';
+      _typeBusy  = false;
+      if(_typePending){ const t = _typePending; _typePending = null; _beginText(t); }
+    }
+  }
+};
+
+function _beginText(text){
+  _typeBusy    = true;
+  _typeText    = text;
+  _typePos     = 0;
+  _typeAccumMs = 0;
+  _typePauseMs = 0;
+  _typeLastTs  = 0;
+  _typeAlpha   = 1;
+  _typePhase   = 'typing';
+}
+
 function showQuestion(text){
-  const el = document.getElementById('question');
-  if(!el) return;
-  // fade out, swap text, fade in
-  el.style.transition = 'opacity 0.8s ease';
-  el.style.opacity    = '0';
-  clearTimeout(_questionTimer);
-  _questionTimer = setTimeout(() => {
-    el.textContent      = text;
-    el.style.opacity    = '1';
-    // hold for 6s then fade out
-    clearTimeout(_questionTimer);
-    _questionTimer = setTimeout(() => {
-      el.style.opacity = '0';
-    }, 6000);
-  }, 500);
+  if(!text) return;
+  if(_typeBusy){ _typePending = text; return; }
+  _beginText(text);
 }
 
 function toggleKnobs(){

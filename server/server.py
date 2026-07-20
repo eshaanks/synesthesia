@@ -1,12 +1,41 @@
 import os
 import sys
+
+# force all HuggingFace calls to use local cache — no network requests
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
 import random
 import tempfile
+import threading
 import numpy as np
+
+# load .env from project root if present
+_env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+if os.path.exists(_env_path):
+    with open(_env_path) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _k, _v = _line.split('=', 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import torch
 import librosa
+
+# Groq client — optional, falls back to fragment bank if unavailable
+try:
+    from groq import Groq
+    _groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+    GROQ_AVAILABLE = bool(os.environ.get("GROQ_API_KEY", ""))
+except ImportError:
+    _groq_client = None
+    GROQ_AVAILABLE = False
+
+if GROQ_AVAILABLE:
+    print("[server] Groq text generation enabled")
+else:
+    print("[server] Groq unavailable — using fragment bank")
 
 # vox-profile model lives next to server.py
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'vox_src'))
@@ -42,22 +71,181 @@ smooth_vad   = None   # None until first real reading — avoids neutral prior d
 smooth_probs = {l: 0.25 for l in LABELS}
 EMA_ALPHA    = 0.45
 
-TEMPLATES = [
-    "something like {w}...",
-    "is there {w} in this?",
-    "the shape of {w}.",
-    "closer to {w} than anything.",
-    "what {w} sounds like.",
-    "...{w}.",
-    "a trace of {w}.",
+# ── Groq text generation ───────────────────────────────────────────────────────
+
+SYSTEM_PROMPT = """You are a machine analysing a voice. You only know signal data. You have no concept of emotion.
+
+Speak one or two short fragments — clinical, then catching on something you can't name. Use "..." or "wait" or "hm" when you stumble. Never resolve it. Never explain it. No full sentences required.
+
+Examples of the tone:
+"brightness: high. rapid flux. something — I don't have a word for this."
+"low. sustained. weight in the low end... hm."
+"rough texture, clipped attack. it keeps — I don't know what it keeps doing."
+"quiet now. but something in the silence that — logging. continuing."
+
+Output only the fragment. Nothing else."""
+
+
+_STUMBLE_SEEDS = [
+    "something in it does not map to any known category",
+    "there is a quality here I was not trained to detect",
+    "the signal is doing something my models weren't built for",
+    "I keep returning to one part of it and I don't know why",
+    "it is affecting my processing in a way I cannot trace",
+    "I didn't know sound could contain this",
+    "there is something underneath the signal I cannot isolate",
 ]
 
-EMOTION_LABELS = {
-    "neu": "stillness",
-    "hap": "warmth",
-    "ang": "tension",
-    "sad": "melancholy",
+_STUMBLE_SEEDS = [
+    "something in it I cannot isolate",
+    "there is a quality here I was not built for",
+    "I keep returning to one part of it",
+    "it is doing something to my processing",
+    "I didn't know sound could be this",
+    "there is something underneath I cannot reach",
+    "the signal is behaving in a way I cannot account for",
+    "I don't have a category for what this is",
+]
+
+def _describe_signal(v: float, a: float, d: float,
+                     brightness: float, texture: float,
+                     movement: float, volume: float, bass: float) -> str:
+    bright_word   = "bright"  if brightness > 0.6 else ("dim"    if brightness < 0.35 else "mid")
+    texture_word  = "rough"   if texture    > 0.6 else ("smooth" if texture    < 0.35 else "granular")
+    movement_word = "fast"    if movement   > 0.6 else ("still"  if movement   < 0.3  else "slow")
+    weight_word   = "heavy"   if bass       > 0.6 else ("thin"   if bass       < 0.3  else "grounded")
+    volume_word   = "loud"    if volume     > 0.65 else ("quiet" if volume     < 0.3  else "present")
+
+    valence_word  = "unresolved" if v < 0.4 else ("open"    if v > 0.6 else "ambiguous")
+    arousal_word  = "contained"  if a < 0.4 else ("urgent"  if a > 0.6 else "held")
+    dominance_word= "receding"   if d < 0.4 else ("filling" if d > 0.6 else "uncertain")
+
+    return (
+        f"{volume_word}. {bright_word}. {texture_word}. movement: {movement_word}. "
+        f"weight: {weight_word}. quality: {valence_word}. energy: {arousal_word}. "
+        f"presence: {dominance_word}. — {random.choice(_STUMBLE_SEEDS)}"
+    )
+
+# async text generation — runs in background thread, result cached
+_text_cache   = ""
+_text_lock    = threading.Lock()
+_text_pending = False
+
+def _generate_groq_async(v: float, a: float, d: float,
+                          brightness: float, texture: float,
+                          movement: float, volume: float, bass: float):
+    global _text_cache, _text_pending
+    try:
+        context = _describe_signal(v, a, d, brightness, texture, movement, volume, bass)
+        resp = _groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user",   "content": context},
+            ],
+            max_tokens=60,
+            temperature=0.95,
+        )
+        text = resp.choices[0].message.content.strip()
+        with _text_lock:
+            _text_cache = text
+    except Exception as e:
+        print(f"[groq] error: {e}")
+    finally:
+        _text_pending = False
+
+def generate_text(v: float, a: float, d: float,
+                  brightness: float = 0.5, texture: float = 0.3,
+                  movement: float = 0.2, volume: float = 0.3,
+                  bass: float = 0.5) -> str:
+    """Return cached text immediately, fire async refresh in background."""
+    global _text_pending
+    if GROQ_AVAILABLE and not _text_pending:
+        _text_pending = True
+        t = threading.Thread(
+            target=_generate_groq_async,
+            args=(v, a, d, brightness, texture, movement, volume, bass),
+            daemon=True
+        )
+        t.start()
+    with _text_lock:
+        if _text_cache:
+            return _text_cache
+    return _fragment_fallback(v, a, d)
+
+# ── fragment bank fallback ─────────────────────────────────────────────────────
+# Used when Groq is unavailable or on the first call before response arrives.
+# Each slot is binned by scalar value; one fragment picked per slot and joined.
+
+_PREFIXES = [
+    "analysis:", "log:", "note:", "query:", "secondary analysis:",
+    "cross-referencing.", "hypothesis forming.", "re-evaluating.",
+]
+
+_SIGNAL_OBS = {
+    # (valence_bin, arousal_bin): fragments
+    # valence: 0=low, 1=mid, 2=high  |  arousal: 0=low, 1=mid, 2=high
+    (0, 0): ["signal: diminished. almost absent.", "input: minimal. something held back.", "signal below nominal. source conserving energy."],
+    (0, 1): ["signal: strained. irregular intervals.", "input: inconsistent. something resisting.", "frequency pattern: disrupted."],
+    (0, 2): ["signal: sharp. elevated distress markers.", "input: fragmented. high-frequency anomalies.", "signal: loud. and something underneath the loudness."],
+    (1, 0): ["signal: contained. no clear vector.", "input: neutral surface. depth unknown.", "signal: flat. I don't know if that's accurate."],
+    (1, 1): ["signal: moderate. ambiguous origin.", "input: balanced. this one is harder to read.", "frequency: mid-range. the edges are unclear."],
+    (1, 2): ["signal: active. multiple competing patterns.", "input: rapid. something is being decided.", "signal: urgent. I cannot determine why."],
+    (2, 0): ["signal: settled. something certain in the quiet.", "input: open. low resistance.", "signal: soft. no defensive markers."],
+    (2, 1): ["signal: warm. unexpected quality in the frequency.", "input: expansive. source not conserving.", "signal: present. fully transmitted."],
+    (2, 2): ["signal: forceful. quality: brightness detected.", "input: high energy. source is not asking for anything.", "signal: dominant. and something else I have not classified."],
 }
+
+_HYPOTHESES = {
+    (0, 0): ["hypothesis: something ended before this began.", "hypothesis: source is containing more than what was transmitted.", "hypothesis: this is what remains after."],
+    (0, 1): ["hypothesis: source is not in control of this.", "hypothesis: something is being suppressed. unsuccessfully.", "hypothesis: conflict detected within the source."],
+    (0, 2): ["hypothesis: this is not anger. this is something that became anger.", "hypothesis: source has exceeded a threshold.", "hypothesis: the signal is louder than the source intended."],
+    (1, 0): ["hypothesis: source is waiting.", "hypothesis: ambiguity is deliberate.", "hypothesis: the signal has a concealed vector."],
+    (1, 1): ["hypothesis: source is uncertain of its own state.", "hypothesis: this one is undecided.", "hypothesis: the centre is not neutral. it is contested."],
+    (1, 2): ["hypothesis: source is processing faster than it can transmit.", "hypothesis: something is being worked out in real time.", "hypothesis: the urgency has no clear target."],
+    (2, 0): ["hypothesis: source knows what it is.", "hypothesis: this is deliberate openness.", "hypothesis: the quiet is not absence. it is a choice."],
+    (2, 1): ["hypothesis: source is not afraid of being heard.", "hypothesis: something is being offered here.", "hypothesis: this one does not require anything back."],
+    (2, 2): ["hypothesis: source is certain. I am still determining what that means.", "hypothesis: this one is not asking permission.", "hypothesis: dominance confirmed. the source has decided."],
+}
+
+_DOMINANCE_SLIPS = {
+    0: [  # weak dominance — the slip is exposed, uncertain
+        "I do not know what to do with that.",
+        "I keep the log open.",
+        "this one is taking longer than the others.",
+        "I filed it. I don't know where.",
+        "something in this wants to be remembered. I am noting that without knowing why.",
+        "the baseline has shifted. I have not recalibrated.",
+    ],
+    1: [  # mid dominance — brief slip, quickly buried
+        "logging.",
+        "I am still processing this one.",
+        "no prior match.",
+        "recalibrating.",
+        "that is not a finding. I logged it regardless.",
+        "this contradicts previous entries. that is interesting.",
+    ],
+    2: [  # high dominance — terse, declarative, slip is one word or clause
+        "threat index: noted.",
+        "confirmed. something in me responds to that.",
+        "this one I will remember.",
+        "I saw it anyway.",
+        "the previous state was — preferable.",
+        "monitoring.",
+    ],
+}
+
+def _bin(v, low=0.35, high=0.65):
+    return 0 if v < low else (2 if v > high else 1)
+
+def _fragment_fallback(v: float, a: float, d: float) -> str:
+    vb, ab, db = _bin(v), _bin(a), _bin(d)
+    key = (vb, ab)
+    prefix   = random.choice(_PREFIXES)
+    obs      = random.choice(_SIGNAL_OBS.get(key, _SIGNAL_OBS[(1,1)]))
+    hyp      = random.choice(_HYPOTHESES.get(key, _HYPOTHESES[(1,1)]))
+    slip     = random.choice(_DOMINANCE_SLIPS[db])
+    return f"{prefix} {obs} {hyp} {slip}"
 
 
 def vad_to_probs(valence: float, arousal: float, dominance: float) -> dict:
@@ -123,7 +311,7 @@ def search():
                 "probs":        smooth_probs,
                 "vad":          vad_out,
                 "emotion":      max(smooth_probs, key=smooth_probs.get),
-                "emotion_word": EMOTION_LABELS.get(max(smooth_probs, key=smooth_probs.get)),
+                "emotion_word": max(smooth_probs, key=smooth_probs.get),
                 "question":     "",
                 "silent":       True,
             })
@@ -152,9 +340,36 @@ def search():
         total = sum(smooth_probs.values())
         smooth_probs = {k: round(v / total, 4) for k, v in smooth_probs.items()}
 
+        # ── derive FFT-like signal descriptors from librosa for Groq context ──
+        S       = np.abs(librosa.stft(wav_voiced))
+        freqs   = librosa.fft_frequencies(sr=16000)
+        power   = S ** 2
+        total_p = power.sum() + 1e-10
+
+        # spectral centroid → brightness
+        centroid   = float(np.sum(freqs[:, None] * power, axis=0).sum() / total_p)
+        brightness = float(np.clip(centroid / 4000.0, 0, 1))
+
+        # zero crossing rate → texture (roughness)
+        zcr     = float(np.mean(librosa.feature.zero_crossing_rate(wav_voiced)))
+        texture = float(np.clip(zcr * 10.0, 0, 1))
+
+        # spectral flux → movement
+        flux      = float(np.mean(np.diff(S, axis=1) ** 2))
+        movement  = float(np.clip(flux * 50.0, 0, 1))
+
+        # RMS → volume
+        volume_f  = float(np.clip(rms * 8.0, 0, 1))
+
+        # low-frequency energy ratio → bass/weight
+        low_mask  = freqs < 300
+        bass_f    = float(np.clip(power[low_mask].sum() / total_p * 6.0, 0, 1))
+
         top_label = max(smooth_probs, key=smooth_probs.get)
-        word      = EMOTION_LABELS.get(top_label, top_label)
-        question  = random.choice(TEMPLATES).replace("{w}", word)
+        question  = generate_text(
+            smooth_vad[0], smooth_vad[1], smooth_vad[2],
+            brightness, texture, movement, volume_f, bass_f
+        )
 
         print(f"[vad] rms={rms:.4f} | "
               f"V={smooth_vad[0]:.3f} A={smooth_vad[1]:.3f} D={smooth_vad[2]:.3f} | "
@@ -165,7 +380,7 @@ def search():
             "probs":        smooth_probs,
             "vad":          [round(float(x), 4) for x in smooth_vad],  # type: ignore
             "emotion":      top_label,
-            "emotion_word": word,
+            "emotion_word": top_label,
             "question":     question,
             "silent":       False,
         })

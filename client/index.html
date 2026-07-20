@@ -9,9 +9,7 @@
   <div id="app">
     <canvas id="glCanvas"></canvas>
 
-    <div id="question-wrap">
-      <div id="question"></div>
-    </div>
+    <canvas id="textCanvas"></canvas>
 
     <div id="viz-wrap">
       <canvas id="vizCanvas"></canvas>
@@ -20,6 +18,12 @@
     <div id="controls">
       <button id="micBtn" onclick="toggleMic()">start</button>
       <button onclick="toggleKnobs()">knobs</button>
+      <button onclick="toggleFullscreen()" id="fsBtn">fullscreen</button>
+      <button onclick="toggleDebug()" id="dbgBtn">debug</button>
+      <span class="res-label">res:</span>
+      <button onclick="setRes(854,480)"  class="res-btn" id="rb-480">480p</button>
+      <button onclick="setRes(1280,720)" class="res-btn active" id="rb-720">720p</button>
+      <button onclick="setRes(1920,1080)" class="res-btn" id="rb-1080">1080p</button>
     </div>
 
     <div id="emotion-test-btns">
@@ -37,55 +41,11 @@
         <div class="panel-header">
           <h1>Synesthesia</h1>
           <p>signal routing &amp; mood control</p>
-        </div>
-
-        <!-- ── SECTION 0: COLOUR PALETTE ───────────────────────────────────────── -->
-        <div class="panel-section" style="background:var(--bg-1);border-bottom:1px solid var(--line);">
-          <div class="panel-title" style="color:#f472b6;">
-            Colour Palette
-            <span class="sub">VAD colour wheel · live</span>
-          </div>
-
-          <!-- palette picker buttons -->
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
-            <button class="pal-btn active" id="pal-0" onclick="setPalette(0)"
-              style="padding:5px 12px;font-size:10px;border-radius:12px;border-color:rgba(255,80,120,0.5);color:rgba(255,80,120,0.9);">
-              Vivid
-            </button>
-            <button class="pal-btn" id="pal-1" onclick="setPalette(1)"
-              style="padding:5px 12px;font-size:10px;border-radius:12px;border-color:rgba(0,229,255,0.4);color:rgba(0,229,255,0.8);">
-              Neon
-            </button>
-            <button class="pal-btn" id="pal-2" onclick="setPalette(2)"
-              style="padding:5px 12px;font-size:10px;border-radius:12px;border-color:rgba(255,140,0,0.5);color:rgba(255,140,0,0.9);">
-              Ember
-            </button>
-            <button class="pal-btn" id="pal-3" onclick="setPalette(3)"
-              style="padding:5px 12px;font-size:10px;border-radius:12px;border-color:rgba(180,100,220,0.5);color:rgba(180,100,220,0.9);">
-              Dusk
-            </button>
-            <button class="pal-btn" id="pal-4" onclick="setPalette(4)"
-              style="padding:5px 12px;font-size:10px;border-radius:12px;border-color:rgba(180,180,180,0.4);color:rgba(180,180,180,0.8);">
-              Mono
-            </button>
-          </div>
-
-          <!-- colour radius slider -->
-          <div class="mood-row">
-            <div class="p-label">Colour Radius<small>0=solid · 1=wide hue family</small></div>
-            <input type="range" min="0" max="1" step="0.01" value="0.45" id="sl-colorRadius"
-              style="width:100%;accent-color:#f472b6;"
-              oninput="setColorRadius(+this.value)">
-            <div class="p-value" id="val-colorRadius" style="color:#f472b6;">0.45</div>
-          </div>
-
-          <!-- hue shift slider -->
-          <div class="mood-row">
-            <div class="p-label">Hue Shift<small>rotate entire colour wheel</small></div>
-            <input type="range" min="0" max="1" step="0.01" value="0" id="sl-hueShift"
-              style="width:100%;accent-color:#f472b6;"
-              oninput="setHueShift(+this.value)">
-            <div class="p-value" id="val-hueShift" style="color:#f472b6;">0.00</div>
+          <div style="display:flex;gap:6px;margin-top:8px;align-items:center;">
+            <button onclick="loadPreset('default')" style="font-size:9px;padding:4px 10px;border-radius:4px;background:var(--bg-2);border:1px solid rgba(255,255,255,0.15);color:var(--txt-lo);cursor:pointer;letter-spacing:.08em;text-transform:uppercase;">↩ default</button>
+            <button onclick="savePreset()" id="savePresetBtn" style="font-size:9px;padding:4px 10px;border-radius:4px;background:var(--bg-2);border:1px solid rgba(0,229,255,0.25);color:var(--cyan);cursor:pointer;letter-spacing:.08em;text-transform:uppercase;">↓ save</button>
+            <button onclick="document.getElementById('presetFileInput').click()" style="font-size:9px;padding:4px 10px;border-radius:4px;background:var(--bg-2);border:1px solid rgba(255,179,64,0.25);color:var(--amber);cursor:pointer;letter-spacing:.08em;text-transform:uppercase;">↑ load</button>
+            <input type="file" id="presetFileInput" accept=".json" style="display:none" onchange="loadPresetFromFile(this)">
           </div>
         </div>
 
@@ -97,7 +57,7 @@
           </div>
 
           <div class="row-head">
-            <span>signal</span><span>raw</span><span>→gpu</span><span>drives</span><span>×</span>
+            <span>signal</span><span>raw</span><span>→gpu</span><span>drives</span><span>mult</span>
           </div>
           <!-- rows generated by script below -->
         </div>
@@ -148,9 +108,10 @@
           <div class="panel-title amber" style="color:var(--amber);">
             Graphics Pipeline
             <span class="sub">live GPU values</span>
+            <button id="lockAllBtn" onclick="toggleLockAll()" style="margin-left:auto;font-size:10px;padding:2px 8px;border-radius:4px;background:var(--bg-2);border:1px solid var(--amber);color:var(--amber);cursor:pointer;">lock all</button>
           </div>
           <div class="gfx-head">
-            <span>parameter</span><span>gpu</span><span>override</span><span>lock</span>
+            <span>parameter</span><span>gpu</span><span>override</span><span>chase</span><span>lock</span>
           </div>
           <!-- rows generated by script -->
         </div>
@@ -158,8 +119,8 @@
         <!-- ── SECTION 5: VAD TUNER ──────────────────────────────────────────────── -->
         <div class="panel-section" id="vad-tuner-section" style="background:var(--bg-0);">
           <div class="panel-title" style="color:#a78bfa;">
-            VAD Pole Tuner
-            <span class="sub">drag poles · adjusts model live</span>
+            Colour Regions
+            <span class="sub">drag to reposition · centre/edge colour pickers</span>
           </div>
 
           <!-- mini plot -->
@@ -222,11 +183,34 @@
           </div>
         </div>
 
+        <!-- ── SECTION 6: TEXT GENERATION ──────────────────────────────────── -->
+        <div class="panel-section" style="background:var(--bg-0); border-top:1px solid var(--line);">
+          <div class="panel-title" style="color:#67e8f9;">
+            Text Generation
+            <span class="sub">Groq LLM rate control</span>
+          </div>
+          <div class="mood-row">
+            <div class="p-label">Text Rate<small>chunks between Groq calls</small></div>
+            <input type="range" min="1" max="20" step="1" value="1"
+              oninput="window.GROQ_EVERY=+this.value; document.getElementById('val-groq-rate').textContent=+this.value">
+            <div class="p-value" id="val-groq-rate">1</div>
+          </div>
+          <div class="mood-row">
+            <div class="p-label">Text Hold<small>seconds before fade</small></div>
+            <input type="range" min="2" max="30" step="1" value="6"
+              oninput="window.GROQ_HOLD_MS=(+this.value)*1000; document.getElementById('val-groq-hold').textContent=+this.value+'s'">
+            <div class="p-value" id="val-groq-hold">6s</div>
+          </div>
+        </div>
+
       </div><!-- /panel-scroll -->
     </div><!-- /knobs -->
 
-    <div id="log">waiting...</div>
-    <div id="debug-bar"></div>
+    <div id="debug-overlay" class="hidden">
+      <div id="fps-counter">-- fps</div>
+      <div id="log">waiting...</div>
+      <div id="debug-bar"></div>
+    </div>
   </div>
 
   <script src="js/config.js"></script>
@@ -238,75 +222,101 @@
   <script>
     // ── all graphical parameters with their slider ranges and GPU scale fns ──
     const GFX_PARAMS = [
-      // shape uniforms — all 0-1, shader uses full range
-      { key:'volume',     label:'Glow',           desc:'0=dark/dim  1=blown out bright',   pool:'shape', min:0,   max:1,    step:0.01 },
-      { key:'brightness', label:'Vertical Shift', desc:'0=bottom  0.5=centre  1=top',      pool:'shape', min:0,   max:1,    step:0.01 },
-      { key:'tone',       label:'Edge Dissolve',  desc:'0=crisp blob  1=diffuse cloud',    pool:'shape', min:0,   max:1,    step:0.01 },
-      { key:'movement',   label:'Mutation Speed', desc:'0=frozen  1=rapidly morphing',     pool:'shape', min:0,   max:1,    step:0.01 },
-      { key:'texture',    label:'Surface Grain',  desc:'0=smooth  1=coarse / noisy skin',  pool:'shape', min:0,   max:1,    step:0.01 },
-      { key:'bass',       label:'Warp Depth',     desc:'0=clean shape  1=folded chaos',    pool:'shape', min:0,   max:1,    step:0.01 },
-      { key:'spread',     label:'Arm Width',      desc:'0=needle-thin  1=very wide open',  pool:'shape', min:0,   max:1,    step:0.01 },
-      // mood uniforms — written directly to moodTarget when locked
-      { key:'colorTemp',  label:'Colour Temp',    desc:'0=cold blue  1=warm gold',         pool:'mood',  min:0,   max:1,    step:0.01 },
-      { key:'speed',      label:'Flow Speed',     desc:'0=frozen  4=fast ebb',             pool:'mood',  min:0,   max:4,    step:0.05 },
-      { key:'blobSize',   label:'Blob Size',      desc:'0.1=tiny forms  12=fill frame',    pool:'mood',  min:0.1, max:12.0, step:0.05 },
-      { key:'fog',        label:'Fog',            desc:'0=clear  1=whole canvas milky',    pool:'mood',  min:0,   max:1,    step:0.01 },
-      { key:'saturation', label:'Saturation',     desc:'0=greyscale  1=full colour',       pool:'mood',  min:0,   max:1,    step:0.01 },
+      // shape uniforms — lerp: chase speed (0-1), null = snap directly
+      { key:'volume',     label:'Glow',           desc:'0=dark/dim  1=blown out bright',   pool:'shape',  min:0,   max:1,    step:0.01, lerp:0.25 },
+      { key:'brightness', label:'Vertical Shift', desc:'0=bottom  0.5=centre  1=top',      pool:'shape',  min:0,   max:1,    step:0.01, lerp:0.12 },
+      { key:'tone',       label:'Edge Dissolve',  desc:'0=crisp blob  1=diffuse cloud',    pool:'shape',  min:0,   max:1,    step:0.01, lerp:0.08 },
+      { key:'movement',   label:'Mutation Speed', desc:'0=frozen  1=rapidly morphing',     pool:'shape',  min:0,   max:1,    step:0.01, lerp:0.35 },
+      { key:'texture',    label:'Surface Grain',  desc:'0=smooth  1=coarse / noisy skin',  pool:'shape',  min:0,   max:1,    step:0.01, lerp:0.10 },
+      { key:'bass',       label:'Warp Depth',     desc:'0=clean shape  1=folded chaos',    pool:'shape',  min:0,   max:1,    step:0.01, lerp:0.70 },
+      { key:'spread',     label:'Arm Width',      desc:'0=needle-thin  1=very wide open',  pool:'shape',  min:0,   max:1,    step:0.01, lerp:null  },
+      // mood uniforms
+      { key:'colorTemp',   label:'Colour Temp',    desc:'0=cold blue  1=warm gold',         pool:'mood',   min:0,   max:1,    step:0.01, lerp:0.03 },
+      { key:'speed',       label:'Flow Speed',     desc:'0=frozen  4=fast ebb',             pool:'mood',   min:0,   max:4,    step:0.05, lerp:0.60 },
+      { key:'blobSize',    label:'Blob Size',      desc:'0.1=tiny forms  12=fill frame',    pool:'mood',   min:0.1, max:12.0, step:0.05, lerp:0.70 },
+      { key:'fog',         label:'Fog',            desc:'0=clear  1=whole canvas milky',    pool:'mood',   min:0,   max:1,    step:0.01, lerp:0.02 },
+      { key:'saturation',  label:'Saturation',     desc:'0=greyscale  1=full colour',       pool:'mood',   min:0,   max:1,    step:0.01, lerp:0.05 },
+      // colour wheel params
+      { key:'colorRadius', label:'Colour Blend',   desc:'low=sharp emotion colour, high=blended between emotions', pool:'colour', min:0.01,max:2, step:0.01, lerp:0.50 },
+      { key:'hueShift',    label:'Hue Cycle',      desc:'rotates colour phase through A→B→C', pool:'colour', min:0,   max:1,    step:0.01, lerp:0.06 },
+      { key:'colorBand',   label:'Colour Spread',  desc:'0=single colour  1=full A→B→C sweep',pool:'colour', min:0,   max:1,    step:0.01, lerp:0.20 },
     ];
 
     // which keys go where
-    const SHAPE_KEYS_SET = new Set(['volume','brightness','tone','movement','texture','bass','spread']);
-    const MOOD_KEYS_SET  = new Set(['colorTemp','speed','blobSize','fog','saturation']);
+    const SHAPE_KEYS_SET  = new Set(['volume','brightness','tone','movement','texture','bass','spread']);
+    const MOOD_KEYS_SET   = new Set(['colorTemp','speed','blobSize','fog','saturation']);
+    const COLOUR_KEYS_SET = new Set(['colorRadius','hueShift','colorBand']);
 
     // ── lock state — when true, param ignores all routing and uses manual value
     const gfxLock    = {};
-    const gfxManual  = {};   // manual 0-1 override values (slider range)
-    GFX_PARAMS.forEach(p => { gfxLock[p.key] = false; gfxManual[p.key] = (p.min + p.max) / 2; });
-    // sensible defaults
-    gfxManual.colorTemp  = 0.5;
-    gfxManual.speed      = 0.25;  // unlocked default: feeds 0-1 path → *4.0 = 1.0 GPU speed
-    gfxManual.blobSize   = 0.33;  // unlocked default: 0-1 path → 0.8 + 0.33*4.2 ≈ 2.2 GPU
-    gfxManual.fog        = 0.0;
-    gfxManual.saturation = 1.0;
-    gfxManual.volume     = 0.2;
-    gfxManual.brightness = 0.5;
-    gfxManual.tone       = 0.3;
-    gfxManual.movement   = 0.1;
-    gfxManual.texture    = 0.2;
-    gfxManual.bass       = 0.5;
-    gfxManual.spread     = 0.5;
+    const gfxManual  = {};   // manual override values (slider range)
+    const gfxLerp    = {};   // per-param chase speed; null = snap
+    GFX_PARAMS.forEach(p => {
+      gfxLock[p.key]   = false;
+      gfxManual[p.key] = (p.min + p.max) / 2;
+      gfxLerp[p.key]   = p.lerp;   // null means snap
+    });
+    window.gfxLock   = gfxLock;
+    window.gfxManual = gfxManual;
+    window.gfxLerp   = gfxLerp;
+    // defaults restored from saved state
+    gfxManual.colorTemp   = 0.5;
+    gfxManual.speed       = 0.01;
+    gfxManual.blobSize    = 0.93;
+    gfxManual.fog         = 0.0;
+    gfxManual.saturation  = 1.0;
+    gfxManual.volume      = 0.66;
+    gfxManual.brightness  = 0.0;
+    gfxManual.tone        = 0.0;
+    gfxManual.movement    = 0.76;
+    gfxManual.texture     = 0.0;
+    gfxManual.bass        = 1.0;
+    gfxManual.spread      = 0.02;
+    gfxManual.colorRadius = 1.0;
+    gfxManual.hueShift    = 0.0;
+    gfxManual.colorBand   = 0.7;
+
+    // lock state from saved session
+    gfxLock.volume      = true;
+    gfxLock.movement    = true;
+    gfxLock.colorRadius = true;
 
     // ── unified dropdown options (for signal/scalar routing rows) ─────────────
     const ALL_GFX_OPTIONS = [
-      { value:'none',        label:'— off —',       group:'.' },
-      { value:'volume',      label:'Glow',           group:'Shape' },
-      { value:'brightness',  label:'Vertical Shift', group:'Shape' },
-      { value:'tone',        label:'Edge Structure', group:'Shape' },
-      { value:'movement',    label:'Mutation Speed', group:'Shape' },
-      { value:'texture',     label:'Edge Sharpness', group:'Shape' },
-      { value:'bass',        label:'Warp Depth',     group:'Shape' },
-      { value:'spread',      label:'Arm Openness',   group:'Shape' },
-      { value:'colorTemp',   label:'Colour Temp',    group:'Mood' },
-      { value:'speed',       label:'Flow Speed',     group:'Mood' },
-      { value:'blobSize',    label:'Blob Size',      group:'Mood' },
-      { value:'fog',         label:'Fog',            group:'Mood' },
-      { value:'saturation',  label:'Saturation',     group:'Mood' },
+      { value:'none',        label:'— off —',        group:'.' },
+      { value:'volume',      label:'Glow',            group:'Shape' },
+      { value:'brightness',  label:'Vertical Shift',  group:'Shape' },
+      { value:'tone',        label:'Edge Dissolve',   group:'Shape' },
+      { value:'movement',    label:'Mutation Speed',  group:'Shape' },
+      { value:'texture',     label:'Surface Grain',   group:'Shape' },
+      { value:'bass',        label:'Warp Depth',      group:'Shape' },
+      { value:'spread',      label:'Arm Width',       group:'Shape' },
+      { value:'colorTemp',   label:'Colour Temp',     group:'Mood' },
+      { value:'speed',       label:'Flow Speed',      group:'Mood' },
+      { value:'blobSize',    label:'Blob Size',       group:'Mood' },
+      { value:'fog',         label:'Fog',             group:'Mood' },
+      { value:'saturation',  label:'Saturation',      group:'Mood' },
+      { value:'colorRadius', label:'Colour Blend',    group:'Colour' },
+      { value:'hueShift',    label:'Hue Cycle',       group:'Colour' },
+      { value:'colorBand',   label:'Colour Spread',   group:'Colour' },
     ];
 
     // ── 12 FFT signal definitions ─────────────────────────────────────────────
     const SIGNAL_DEFS = [
-      { key:'volume',     label:'Loudness',    desc:'overall RMS energy' },
-      { key:'bass',       label:'Bass',        desc:'low body 80-300 Hz' },
-      { key:'sub',        label:'Sub',         desc:'deep rumble 20-80 Hz' },
-      { key:'midrange',   label:'Midrange',    desc:'voice body 300-2kHz' },
-      { key:'presence',   label:'Presence',    desc:'attack/consonants 2-5kHz' },
-      { key:'brightness', label:'Tone Colour', desc:'spectral centroid' },
-      { key:'tone',       label:'Tonality',    desc:'singing vs breathy noise' },
-      { key:'clarity',    label:'Clarity',     desc:'clean vs muddy voice' },
-      { key:'texture',    label:'Grain',       desc:'smooth vs fricative' },
-      { key:'movement',   label:'Change Rate', desc:'frame-to-frame flux' },
-      { key:'attack',     label:'Attack',      desc:'onset sharpness / punch' },
-      { key:'spread',     label:'Air',         desc:'sibilance / 10kHz+' },
+      { key:'volume',         label:'Power',           desc:'raw loudness — how much air is behind the sound right now' },
+      { key:'bass',           label:'Low Body',        desc:'energy in the 80–300Hz chest register — rises with full-throated low notes, drops in head voice or falsetto' },
+      { key:'midrange',       label:'Voice Body',      desc:'energy in the 300Hz–2kHz band — the core presence of the voice, where most of its weight lives' },
+      { key:'presence',       label:'Projection',      desc:'energy in the 2–5kHz cut-through band — rises when the voice carries and rings forward, drops when it recedes' },
+      { key:'brightness',     label:'Spectral Centre', desc:'centre of gravity across the full spectrum — high when energy is skewed toward highs, low when it sits in the lows' },
+      { key:'tone',           label:'Pitch Purity',    desc:'how tonal vs noise-like the sound is — high on a clean sustained note, low on breath, whisper, or consonants' },
+      { key:'texture',        label:'Grain',           desc:'surface roughness — rises with rasp, grit, fricatives and consonants; low on smooth open vowels' },
+      { key:'movement',       label:'Flux',            desc:'how fast the voice is changing — low on a stable held note, high during runs, pitch jumps, consonants or timbre shifts' },
+      { key:'spread',         label:'Air / Breath',    desc:'energy above 10kHz — the airy, breathy layer of the voice; high on breathy or open falsetto, low on a fully supported tone' },
+      { key:'f0',             label:'Pitch',           desc:'the actual note being sung — low = deep, high = upper register, zero when no clear pitch detected' },
+      { key:'f0delta',        label:'Pitch Movement',  desc:'how fast pitch is changing right now — zero on a held note, high during slides, runs or large leaps between notes' },
+      { key:'f0confidence',   label:'Tonal Clarity',   desc:'how strongly a single pitch dominates — high on a pure clear note, low on noise, consonants or when multiple pitches compete' },
+      { key:'tilt',           label:'Spectral Tilt',   desc:'balance of low vs high energy — low = dark bass-heavy voice, high = bright treble-heavy voice' },
+      { key:'spectralSpread', label:'Spread',          desc:'how wide the energy is dispersed — narrow on a pure focused tone, wide on a noisy or complex multi-harmonic sound' },
     ];
 
     // emotion probability → graphics routing (probs are 0-1 each)
@@ -349,8 +359,20 @@
         <div class="p-value"     id="sv-${def.key}">0.00</div>
         <div class="p-value-gpu" id="sg-${def.key}">--</div>
         <select onchange="fftRoute['${def.key}'].dst=this.value"></select>
-        <input type="range" min="-3" max="6" step="0.1" value="1"
-          oninput="fftRoute['${def.key}'].mul=+this.value">
+        <div class="mul-wrap">
+          <input class="mul-slider" type="range" min="-4" max="4" step="0.05" value="${fftRoute[def.key]?.mul ?? 1}"
+            id="mul-${def.key}"
+            oninput="fftRoute['${def.key}'].mul=+this.value; document.getElementById('mulv-${def.key}').textContent=(+this.value).toFixed(2)">
+          <div class="mul-row">
+            <span class="mul-label">×</span>
+            <span class="mul-value" id="mulv-${def.key}">${(fftRoute[def.key]?.mul ?? 1).toFixed(2)}</span>
+            <button class="mul-reset" onclick="
+              fftRoute['${def.key}'].mul=1;
+              document.getElementById('mul-${def.key}').value=1;
+              document.getElementById('mulv-${def.key}').textContent='1.00'
+            ">↺</button>
+          </div>
+        </div>
       `;
       sigSection.appendChild(row);
       buildSelect(row.querySelector('select'), fftRoute[def.key]?.dst);
@@ -368,6 +390,8 @@
       const row = document.createElement('div');
       row.className = 'gfx-row';
       row.id = 'gfx-' + p.key;
+      const lerpVal = p.lerp !== null && p.lerp !== undefined ? p.lerp : '';
+      const lerpPh  = p.lerp === null ? 'snap' : '';
       row.innerHTML = `
         <div class="p-label">${p.label}<small>${p.desc}</small></div>
         <div class="p-value" id="gv-${p.key}">0.00</div>
@@ -375,9 +399,23 @@
           min="${p.min}" max="${p.max}" step="${p.step}" value="${gfxManual[p.key]}"
           oninput="gfxManual['${p.key}']=+this.value; document.getElementById('gv-${p.key}').textContent=(+this.value).toFixed(2)"
           id="gsl-${p.key}">
+        <input class="chase-input" type="number" min="0" max="1" step="0.01"
+          value="${lerpVal}" placeholder="${lerpPh}"
+          title="chase speed (0–1, blank=snap)"
+          oninput="gfxLerp['${p.key}']=this.value===''?null:Math.min(1,Math.max(0,+this.value))"
+          id="lr-${p.key}">
         <button class="lock-btn" id="lk-${p.key}" onclick="toggleLock('${p.key}')">auto</button>
       `;
       gfxSection.appendChild(row);
+    });
+
+    // apply initial lock states to UI now that rows exist
+    GFX_PARAMS.forEach(p => {
+      if(!gfxLock[p.key]) return;
+      const btn = document.getElementById('lk-' + p.key);
+      const sl  = document.getElementById('gsl-' + p.key);
+      if(btn){ btn.textContent = 'lock'; btn.classList.add('locked'); }
+      if(sl) { sl.classList.add('active'); sl.value = gfxManual[p.key]; }
     });
 
     function toggleLock(key){
@@ -402,9 +440,20 @@
       }
     }
 
+    let _allLocked = false;
+    function toggleLockAll(){
+      _allLocked = !_allLocked;
+      GFX_PARAMS.forEach(p => {
+        if(gfxLock[p.key] !== _allLocked) toggleLock(p.key);
+      });
+      window.vadLock = _allLocked;
+      document.getElementById('lockAllBtn').textContent = _allLocked ? 'unlock all' : 'lock all';
+    }
+
     function readGpuCurrent(key){
       if(typeof fftCurrent  !== 'undefined' && fftCurrent[key]  !== undefined) return fftCurrent[key];
       if(typeof moodCurrent !== 'undefined' && moodCurrent[key] !== undefined) return moodCurrent[key];
+      if(COLOUR_KEYS_SET && COLOUR_KEYS_SET.has(key)) return gfxManual[key] ?? null;
       return null;
     }
 
@@ -425,17 +474,26 @@
       }
     };
 
+    // emotion contributions to shape keys — accumulated here, added in visualizer fftLoop
+    window._emotionShapeAccum = {};
+
     function applyModelRouting(){
+      window._emotionShapeAccum = {};
       for(const [em, route] of Object.entries(modelRoute)){
         if(!route.dst || route.dst === 'none') continue;
         if(gfxLock[route.dst]) continue;
         const v = Math.min(1, Math.max(0, _rawProbs[em] * route.mul));
         if(SHAPE_KEYS_SET.has(route.dst)){
-          if(typeof fftTarget !== 'undefined') fftTarget[route.dst] = v;
+          // accumulate rather than overwrite — visualizer adds this to shapAccum each frame
+          window._emotionShapeAccum[route.dst] = (window._emotionShapeAccum[route.dst] ?? 0) + v;
         }
-        if(MOOD_KEYS_SET.has(route.dst)) _scalarMoodAccum[route.dst] = v;
+        if(MOOD_KEYS_SET.has(route.dst))   _scalarMoodAccum[route.dst] = v;
+        if(COLOUR_KEYS_SET.has(route.dst)) _scalarColourAccum[route.dst] = v;
       }
     }
+
+    // accumulator for colour param routing
+    const _scalarColourAccum = {};
 
     // accumulator for scalar → mood routing (reset each tick)
     const _scalarMoodAccum = {};
@@ -457,21 +515,19 @@
           if(fftMood[k]    !== undefined) v += fftMood[k];
           if(_scalarMoodAccum[k] !== undefined) v += _scalarMoodAccum[k];
           mood[k] = Math.min(1, Math.max(0, v));
-          // if nothing is routed to this param, hold last moodCurrent value
-          // (prevents snapping to 0 when no signal drives it)
-          if(fftMood[k] === undefined && _scalarMoodAccum[k] === undefined){
-            mood[k] = gfxManual[k];
-          }
         }
         delete _scalarMoodAccum[k];
       });
 
       // unlocked params: scale 0-1 routing signal to GPU range, write to moodTarget (lerped)
-      if(!gfxLock.colorTemp)  moodTarget.colorTemp  = mood.colorTemp;
-      if(!gfxLock.speed)      moodTarget.speed      = mood.speed * 4.0;
-      if(!gfxLock.blobSize)   moodTarget.blobSize   = 0.8 + mood.blobSize * 4.2;
-      if(!gfxLock.fog)        moodTarget.fog        = mood.fog;
-      if(!gfxLock.saturation) moodTarget.saturation = mood.saturation;
+      // only write when something is actually routed — otherwise hold last target
+      const _fftHas  = k => fftMood[k]         !== undefined;
+      const _sclHas  = k => _scalarMoodAccum[k] !== undefined;
+      if(!gfxLock.colorTemp  && (_fftHas('colorTemp')  || _sclHas('colorTemp')))  moodTarget.colorTemp  = mood.colorTemp;
+      if(!gfxLock.speed      && (_fftHas('speed')      || _sclHas('speed')))      moodTarget.speed      = mood.speed * 4.0;
+      if(!gfxLock.blobSize   && (_fftHas('blobSize')   || _sclHas('blobSize')))   moodTarget.blobSize   = 0.8 + mood.blobSize * 11.2;
+      if(!gfxLock.fog        && (_fftHas('fog')        || _sclHas('fog')))        moodTarget.fog        = mood.fog;
+      if(!gfxLock.saturation && (_fftHas('saturation') || _sclHas('saturation'))) moodTarget.saturation = mood.saturation;
 
       // locked params: write slider value directly to BOTH target AND current — instant, no lerp lag
       if(gfxLock.colorTemp)  { moodTarget.colorTemp  = moodCurrent.colorTemp  = gfxManual.colorTemp;  }
@@ -487,16 +543,71 @@
         }
       });
     }
-    window._globalTick = pushMoodUniforms;
+    // ── push colour wheel params (colorRadius, hueShift) each frame ──────────
+    function pushColourUniforms(){
+      if(typeof U === 'undefined' || typeof gl === 'undefined') return;
+      gl.useProgram(prog);
+
+      const fftColour = window._fftMoodAccum || {};
+      ['colorRadius','hueShift','colorBand'].forEach(k => {
+        let v;
+        if(gfxLock[k]){
+          v = gfxManual[k];
+        } else {
+          v = 0;
+          if(fftColour[k]          !== undefined) v += fftColour[k];
+          if(_scalarColourAccum[k] !== undefined) v += _scalarColourAccum[k];
+          if(fftColour[k] === undefined && _scalarColourAccum[k] === undefined) v = gfxManual[k];
+          v = Math.min(2, Math.max(0, v));
+        }
+        delete _scalarColourAccum[k];
+        if(k === 'colorRadius') gl.uniform1f(U.colorRadius, v);
+        if(k === 'hueShift')    gl.uniform1f(U.hueShift,    v);
+        if(k === 'colorBand')   gl.uniform1f(U.colorBand,   v);
+      });
+    }
+
+    const _origGlobalTick = window._globalTick;
+    window._globalTick = function(ts){
+      if(_origGlobalTick) _origGlobalTick(ts);
+      pushMoodUniforms();
+      pushColourUniforms();
+    };
 
     // ── live meters at 80ms ───────────────────────────────────────────────────
+    const _knobsEl = document.getElementById('knobs');
+    const _debugEl = document.getElementById('debug-overlay');
     setInterval(() => {
-      // Section 1 — raw signal values + GPU destination value
+      const knobsOpen  = _knobsEl && !_knobsEl.classList.contains('hidden');
+      const debugOpen  = _debugEl && !_debugEl.classList.contains('hidden');
+
+      // debug overlay — only update when visible
+      if(debugOpen){
+        const dbg = document.getElementById('debug-bar');
+        if(dbg){
+          const r = window._lastServerResponse;
+          const age = window._lastServerTime ? ((Date.now() - window._lastServerTime)/1000).toFixed(1) : '?';
+          if(r && r.probs){
+            const p = r.probs;
+            const v = r.vad || [0,0,0];
+            const silent = r.silent ? ' [silent]' : '';
+            dbg.textContent =
+              `server ${age}s ago${silent}  |  `+
+              `V=${v[0]?.toFixed(3)} A=${v[1]?.toFixed(3)} D=${v[2]?.toFixed(3)}  |  `+
+              `neu=${p.neu?.toFixed(3)} hap=${p.hap?.toFixed(3)} ang=${p.ang?.toFixed(3)} sad=${p.sad?.toFixed(3)}  →  ${r.emotion}`;
+          } else {
+            dbg.textContent = 'no server data yet';
+          }
+        }
+      }
+
+      // knobs panel meters — skip entirely when panel is closed
+      if(!knobsOpen) return;
+
       if(typeof fftSmooth !== 'undefined'){
         SIGNAL_DEFS.forEach(def => {
           const rawEl = document.getElementById('sv-' + def.key);
           if(rawEl) rawEl.textContent = (fftSmooth[def.key] ?? 0).toFixed(2);
-
           const dst = fftRoute[def.key]?.dst;
           const gpuEl = document.getElementById('sg-' + def.key);
           if(gpuEl){
@@ -506,7 +617,6 @@
         });
       }
 
-      // Section 2 — emotion prob readouts + GPU destination
       EMOTION_LABELS.forEach(em => {
         const probEl = document.getElementById('scv-' + em);
         if(probEl) probEl.textContent = (_rawProbs[em] ?? 0).toFixed(3);
@@ -517,40 +627,160 @@
         }
       });
 
-      // Debug bar — raw server response
-      const dbg = document.getElementById('debug-bar');
-      if(dbg){
-        const r = window._lastServerResponse;
-        const age = window._lastServerTime ? ((Date.now() - window._lastServerTime)/1000).toFixed(1) : '?';
-        if(r && r.probs){
-          const p = r.probs;
-          const v = r.vad || [0,0,0];
-          const silent = r.silent ? ' [silent]' : '';
-          dbg.textContent =
-            `server ${age}s ago${silent}  |  `+
-            `V=${v[0]?.toFixed(3)} A=${v[1]?.toFixed(3)} D=${v[2]?.toFixed(3)}  |  `+
-            `neu=${p.neu?.toFixed(3)} hap=${p.hap?.toFixed(3)} ang=${p.ang?.toFixed(3)} sad=${p.sad?.toFixed(3)}  →  ${r.emotion}`;
-        } else {
-          dbg.textContent = 'no server data yet';
-        }
-      }
-
-      // Section 3 — live GPU values + sync slider when NOT locked
       GFX_PARAMS.forEach(p => {
         const cur = readGpuCurrent(p.key);
         if(cur === null) return;
         const valEl = document.getElementById('gv-' + p.key);
         const sl    = document.getElementById('gsl-' + p.key);
         if(!gfxLock[p.key]){
-          // auto mode: show live GPU value, keep slider synced
           if(valEl) valEl.textContent = cur.toFixed(2);
           if(sl)    sl.value = Math.min(p.max, Math.max(p.min, cur));
         } else {
-          // locked: readout shows manual value (slider is the truth)
           if(valEl) valEl.textContent = gfxManual[p.key].toFixed(2);
         }
       });
-    }, 80);
+    }, 200);
+  </script>
+
+  <script>
+  function savePreset(){
+    const now  = new Date();
+    const pad  = n => String(n).padStart(2,'0');
+    const name = `session-${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`
+               + `_${pad(now.getHours())}${pad(now.getMinutes())}`;
+
+    const data = {
+      _note: `Saved from browser — ${now.toISOString()}`,
+      _date: now.toISOString().slice(0,10),
+      fftRoute:   JSON.parse(JSON.stringify(fftRoute)),
+      gfxLock:    JSON.parse(JSON.stringify(gfxLock)),
+      gfxManual:  JSON.parse(JSON.stringify(gfxManual)),
+      gfxLerp:    JSON.parse(JSON.stringify(gfxLerp)),
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = name + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    const btn = document.getElementById('savePresetBtn');
+    if(btn){ const orig = btn.textContent; btn.textContent = '✓ saved'; setTimeout(()=>btn.textContent=orig, 1500); }
+  }
+
+  function applyPreset(p, label){
+    // restore routing
+    if(p.fftRoute) Object.assign(fftRoute, p.fftRoute);
+
+    // restore lock, manual, lerp
+    GFX_PARAMS.forEach(param => {
+      const k = param.key;
+      if(p.gfxLock   && p.gfxLock[k]   !== undefined) gfxLock[k]   = p.gfxLock[k];
+      if(p.gfxManual && p.gfxManual[k] !== undefined) gfxManual[k] = p.gfxManual[k];
+      if(p.gfxLerp   && p.gfxLerp[k]  !== undefined) gfxLerp[k]   = p.gfxLerp[k];
+
+      const sl = document.getElementById('gsl-' + k);
+      const lk = document.getElementById('lk-'  + k);
+      const lr = document.getElementById('lr-'  + k);
+      if(sl) sl.value = gfxManual[k];
+      if(lk){
+        lk.textContent = gfxLock[k] ? 'lock' : 'auto';
+        lk.classList.toggle('locked', gfxLock[k]);
+        const slEl = document.getElementById('gsl-' + k);
+        if(slEl) slEl.classList.toggle('active', gfxLock[k]);
+      }
+      if(lr) lr.value = gfxLerp[k] === null ? '' : (gfxLerp[k] ?? '');
+    });
+
+    // sync routing dropdowns + multiplier sliders
+    if(typeof SIGNAL_DEFS !== 'undefined') SIGNAL_DEFS.forEach(def => {
+      const route = fftRoute[def.key];
+      if(!route) return;
+      const sel   = document.querySelector(`#sig-${def.key} select`);
+      const mulSl = document.getElementById('mul-'  + def.key);
+      const mulV  = document.getElementById('mulv-' + def.key);
+      if(sel)   sel.value = route.dst;
+      if(mulSl){ mulSl.min = -4; mulSl.value = route.mul; }
+      if(mulV)  mulV.textContent = (+route.mul).toFixed(2);
+    });
+
+    console.log('[preset] applied:', label);
+  }
+
+  async function loadPreset(name){
+    const res = await fetch(`../presets/${name}.json`);
+    const p   = await res.json();
+    applyPreset(p, name);
+  }
+
+  function loadPresetFromFile(input){
+    const file = input.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const p = JSON.parse(e.target.result);
+        applyPreset(p, file.name);
+        const btn = document.querySelector('button[onclick*="presetFileInput"]');
+        if(btn){ const orig = btn.textContent; btn.textContent = '✓ ' + file.name.replace('.json','').slice(0,12); setTimeout(()=>btn.textContent=orig, 2500); }
+      } catch(err) {
+        console.error('[preset] parse error:', err);
+        alert('Could not parse preset file — is it valid JSON?');
+      }
+    };
+    reader.readAsText(file);
+    input.value = '';  // reset so same file can be reloaded
+  }
+
+  function toggleDebug(){
+    const el = document.getElementById('debug-overlay');
+    if(!el) return;
+    el.classList.toggle('hidden');
+    const btn = document.getElementById('dbgBtn');
+    if(btn) btn.classList.toggle('active', !el.classList.contains('hidden'));
+  }
+
+  function setRes(w, h){
+    if(typeof window.setResolution === 'function') window.setResolution(w, h);
+    ['480','720','1080'].forEach(p => {
+      const b = document.getElementById('rb-' + p);
+      if(b) b.classList.remove('active');
+    });
+    const tag = h === 480 ? '480' : h === 720 ? '720' : '1080';
+    const b = document.getElementById('rb-' + tag);
+    if(b) b.classList.add('active');
+  }
+
+  // FPS tracking — measured in renderLoop, written to overlay
+  let _fpsFrames = 0, _fpsLast = performance.now();
+  window._onRenderFrame = function(){
+    _fpsFrames++;
+    const now = performance.now();
+    if(now - _fpsLast >= 500){
+      const fps = (_fpsFrames / ((now - _fpsLast) / 1000)).toFixed(0);
+      _fpsFrames = 0; _fpsLast = now;
+      const el = document.getElementById('fps-counter');
+      if(el) el.textContent = fps + ' fps';
+    }
+  };
+
+  function toggleFullscreen(){
+    const el = document.getElementById('app');
+    if(!document.fullscreenElement){
+      el.requestFullscreen().catch(e => console.warn('fullscreen denied:', e));
+    } else {
+      document.exitFullscreen();
+    }
+  }
+  document.addEventListener('fullscreenchange', () => {
+    const btn = document.getElementById('fsBtn');
+    if(btn) btn.classList.toggle('active', !!document.fullscreenElement);
+  });
+  // F key shortcut
+  document.addEventListener('keydown', e => {
+    if(e.key === 'f' || e.key === 'F') toggleFullscreen();
+  });
   </script>
 
   <script>
@@ -593,33 +823,16 @@
   </script>
 
   <script>
-  // ── colour palette controls ───────────────────────────────────────────────────
-  function setPalette(idx){
-    if(typeof U === 'undefined' || typeof gl === 'undefined') return;
-    gl.useProgram(prog);
-    gl.uniform1i(U.palette, idx);
-    document.querySelectorAll('.pal-btn').forEach((b,i) => b.classList.toggle('active', i === idx));
-  }
-
-  function setColorRadius(v){
-    if(typeof U !== 'undefined') { gl.useProgram(prog); gl.uniform1f(U.colorRadius, v); }
-    document.getElementById('val-colorRadius').textContent = v.toFixed(2);
-  }
-
-  function setHueShift(v){
-    if(typeof U !== 'undefined') { gl.useProgram(prog); gl.uniform1f(U.hueShift, v); }
-    document.getElementById('val-hueShift').textContent = v.toFixed(2);
-  }
-  </script>
-
-  <script>
-  // ── VAD POLE TUNER ────────────────────────────────────────────────────────────
+  // ── VAD COLOUR REGION TUNER ──────────────────────────────────────────────────
   (function(){
-    const VT_EMOTIONS = [
-      { key:'ang', label:'Angry',   color:'#ff5c5c', v:0.15, a:0.55, d:0.70 },
-      { key:'hap', label:'Happy',   color:'#ffd166', v:0.75, a:0.55, d:0.60 },
-      { key:'sad', label:'Sad',     color:'#74b9ff', v:0.15, a:0.30, d:0.35 },
-      { key:'neu', label:'Neutral', color:'#a8a8b3', v:0.45, a:0.40, d:0.50 },
+    // 6 hard-edged palette regions draggable in VAD space — 3 flat colours each
+    const VT_REGIONS = [
+      { idx:0, label:'Sad',           dot:'#00eeff', v:0.15, a:0.20, rad:0.50, col0:'#0000ff', col1:'#00eeff', col2:'#cc00ff' },
+      { idx:1, label:'Happy',         dot:'#ffee00', v:0.85, a:0.65, rad:0.50, col0:'#ffee00', col1:'#aaff00', col2:'#ff9900' },
+      { idx:2, label:'Angry',         dot:'#ff0000', v:0.15, a:0.82, rad:0.48, col0:'#ff0000', col1:'#ff5500', col2:'#ff0066' },
+      { idx:3, label:'Happy+Aroused', dot:'#ff6600', v:0.78, a:0.88, rad:0.40, col0:'#ff6600', col1:'#ffdd00', col2:'#88ff00' },
+      { idx:4, label:'Dominant',      dot:'#ff00cc', v:0.48, a:0.92, rad:0.34, col0:'#ff00cc', col1:'#ff44ff', col2:'#8800ff' },
+      { idx:5, label:'Calm',          dot:'#00ff44', v:0.68, a:0.12, rad:0.30, col0:'#00ff44', col1:'#00ffcc', col2:'#00aaff' },
     ];
     let vtTemp = 0.15;
     let vtDragging = null;
@@ -634,27 +847,69 @@
     function toC(v, a){ return [PAD + v*(W-PAD*2), H - PAD - a*(H-PAD*2)]; }
     function fromC(cx, cy){ return { v:(cx-PAD)/(W-PAD*2), a:1-(cy-PAD)/(H-PAD*2) }; }
 
-    // ── build D sliders ──
+    // push all 6 regions to GPU
+    function pushRegionsToGPU(){
+      if(typeof U === 'undefined' || typeof gl === 'undefined') return;
+      gl.useProgram(prog);
+      function hf(h){ return [parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255]; }
+      VT_REGIONS.forEach(r => {
+        const n = r.idx;
+        gl.uniform2f(U[`r${n}pos`], r.v, r.a);
+        gl.uniform1f(U[`r${n}rad`], r.rad);
+        const [r0,g0,b0]=hf(r.col0); gl.uniform3f(U[`r${n}col0`],r0,g0,b0);
+        const [r1,g1,b1]=hf(r.col1); gl.uniform3f(U[`r${n}col1`],r1,g1,b1);
+        const [r2,g2,b2]=hf(r.col2); gl.uniform3f(U[`r${n}col2`],r2,g2,b2);
+      });
+    }
+    pushRegionsToGPU();
+
+    // build per-region controls
     const dSliders = document.getElementById('vt-d-sliders');
-    VT_EMOTIONS.forEach(em => {
-      const row = document.createElement('div');
-      row.style.cssText = 'display:grid;grid-template-columns:52px 1fr 32px;align-items:center;gap:6px;';
-      row.innerHTML = `
-        <div style="font-size:11px;color:${em.color};display:flex;align-items:center;gap:4px;">
-          <span style="width:7px;height:7px;border-radius:50%;background:${em.color};display:inline-block;"></span>
-          ${em.label}
-        </div>
-        <input type="range" min="0" max="1" step="0.01" value="${em.d}"
-          style="accent-color:${em.color};"
-          oninput="vtSetD('${em.key}',+this.value)">
-        <div style="font-size:11px;color:${em.color};text-align:right;" id="vtd-${em.key}">${em.d.toFixed(2)}</div>
+    VT_REGIONS.forEach(r => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:8px;margin-bottom:4px;';
+
+      const lbl = document.createElement('div');
+      lbl.style.cssText = `font-size:11px;font-weight:700;color:${r.dot};display:flex;align-items:center;gap:5px;margin-bottom:6px;`;
+      lbl.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:${r.dot};display:inline-block;"></span>${r.label}`;
+      wrap.appendChild(lbl);
+
+      // three colour pickers — A / B / C map to noise bands low→mid→high
+      [['A', r.col0, 0], ['B', r.col1, 1], ['C', r.col2, 2]].forEach(([label, val, which]) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:grid;grid-template-columns:22px 1fr;align-items:center;gap:6px;margin-bottom:3px;';
+        row.innerHTML = `
+          <div style="font-size:10px;color:var(--txt-lo);">${label}</div>
+          <input type="color" value="${val}" style="width:100%;height:20px;border:none;background:none;cursor:pointer;padding:0;"
+            oninput="vtSetCol(${r.idx},${which},this.value)">
+        `;
+        wrap.appendChild(row);
+      });
+
+      // radius row
+      const radRow = document.createElement('div');
+      radRow.style.cssText = 'display:grid;grid-template-columns:52px 1fr 36px;align-items:center;gap:6px;';
+      radRow.innerHTML = `
+        <div style="font-size:10px;color:var(--txt-lo);">Radius</div>
+        <input type="range" min="0.05" max="1.0" step="0.01" value="${r.rad}"
+          style="accent-color:${r.dot};"
+          oninput="vtSetRad2(${r.idx},+this.value)">
+        <div style="font-size:10px;color:${r.dot};text-align:right;" id="vtr2-${r.idx}">${r.rad.toFixed(2)}</div>
       `;
-      dSliders.appendChild(row);
+      wrap.appendChild(radRow);
+
+      dSliders.appendChild(wrap);
     });
 
-    // ── build prob mini-bars ──
+    // build prob mini-bars (still show emotion probs for monitoring)
+    const PROB_EMOTS = [
+      { key:'ang', label:'Angry',   color:'#ff4444' },
+      { key:'hap', label:'Happy',   color:'#f5a800' },
+      { key:'sad', label:'Sad',     color:'#3d7ab5' },
+      { key:'neu', label:'Neutral', color:'#9fca8f' },
+    ];
     const probBars = document.getElementById('vt-prob-bars');
-    VT_EMOTIONS.forEach(em => {
+    PROB_EMOTS.forEach(em => {
       const row = document.createElement('div');
       row.style.cssText = 'display:grid;grid-template-columns:52px 1fr 36px;align-items:center;gap:6px;';
       row.innerHTML = `
@@ -667,7 +922,7 @@
       probBars.appendChild(row);
     });
 
-    // ── draw ──
+    // draw
     function vtDraw(){
       ctx.clearRect(0,0,W,H);
 
@@ -678,46 +933,41 @@
         ctx.beginPath();ctx.moveTo(x,PAD);ctx.lineTo(x,H-PAD);ctx.stroke();
         ctx.beginPath();ctx.moveTo(PAD,y);ctx.lineTo(W-PAD,y);ctx.stroke();
       }
-
-      // centre axes
+      // axes
       ctx.strokeStyle='rgba(255,255,255,0.12)';
       const [mx]=toC(0.5,0),[,my]=toC(0,0.5);
       ctx.beginPath();ctx.moveTo(mx,PAD);ctx.lineTo(mx,H-PAD);ctx.stroke();
       ctx.beginPath();ctx.moveTo(PAD,my);ctx.lineTo(W-PAD,my);ctx.stroke();
 
-      // halos
-      VT_EMOTIONS.forEach(em=>{
-        const [cx,cy]=toC(em.v,em.a);
-        const r=vtTemp*(W-PAD*2)*1.2;
-        const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r);
-        g.addColorStop(0,em.color+'28'); g.addColorStop(1,em.color+'00');
-        ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+      // region circles — three concentric bands A/B/C
+      VT_REGIONS.forEach(r=>{
+        const [cx,cy]=toC(r.v,r.a);
+        const px=(W-PAD*2)*r.rad;
+        // outer ring: col2
+        ctx.beginPath();ctx.arc(cx,cy,px,0,Math.PI*2);
+        ctx.fillStyle=r.col2+'99';ctx.fill();
+        // mid ring: col1
+        ctx.beginPath();ctx.arc(cx,cy,px*0.65,0,Math.PI*2);
+        ctx.fillStyle=r.col1+'bb';ctx.fill();
+        // inner circle: col0
+        ctx.beginPath();ctx.arc(cx,cy,px*0.32,0,Math.PI*2);
+        ctx.fillStyle=r.col0+'ee';ctx.fill();
+        // hard border
+        ctx.beginPath();ctx.arc(cx,cy,px,0,Math.PI*2);
+        ctx.strokeStyle=r.dot+'cc';ctx.lineWidth=1.5;ctx.stroke();
       });
 
-      // current VAD test point from live server data
-      const r = window._lastServerResponse;
-      if(r && r.vad){
-        const [tv,ta]=[r.vad[0],r.vad[1]];
+      // live VAD dot from server
+      const resp = window._lastServerResponse;
+      if(resp && resp.vad){
+        const [tv,ta]=[resp.vad[0],resp.vad[1]];
         const [tx,ty]=toC(tv,ta);
-
-        // lines to poles
-        const probs=r.probs||{};
-        VT_EMOTIONS.forEach(em=>{
-          const [px,py]=toC(em.v,em.a);
-          const p=probs[em.key]||0;
-          ctx.strokeStyle=em.color+Math.round(p*220).toString(16).padStart(2,'0');
-          ctx.lineWidth=0.5+p*2; ctx.setLineDash([3,4]);
-          ctx.beginPath();ctx.moveTo(tx,ty);ctx.lineTo(px,py);ctx.stroke();
-          ctx.setLineDash([]);
-        });
-
-        // live VAD dot
         ctx.beginPath();ctx.arc(tx,ty,5,0,Math.PI*2);
         ctx.fillStyle='#ffffff';ctx.fill();
         ctx.strokeStyle='rgba(0,0,0,0.5)';ctx.lineWidth=1.5;ctx.stroke();
 
-        // update prob bars from live server data
-        VT_EMOTIONS.forEach(em=>{
+        const probs=resp.probs||{};
+        PROB_EMOTS.forEach(em=>{
           const p=probs[em.key]||0;
           const bar=document.getElementById('vtpb-'+em.key);
           const pct=document.getElementById('vtpp-'+em.key);
@@ -726,125 +976,92 @@
         });
       }
 
-      // poles
-      VT_EMOTIONS.forEach(em=>{
-        const [cx,cy]=toC(em.v,em.a);
+      // region handle dots
+      VT_REGIONS.forEach(r=>{
+        const [cx,cy]=toC(r.v,r.a);
         ctx.beginPath();ctx.arc(cx,cy,9,0,Math.PI*2);
-        ctx.fillStyle=em.color;ctx.fill();
+        ctx.fillStyle=r.dot;ctx.fill();
         ctx.strokeStyle='#0a0c10';ctx.lineWidth=2;ctx.stroke();
-        ctx.fillStyle='#0a0c10';ctx.font='bold 8px monospace';ctx.textAlign='center';
-        ctx.fillText(em.key.toUpperCase(),cx,cy+3);
-        ctx.fillStyle=em.color+'cc';ctx.font='10px sans-serif';
-        ctx.fillText(em.label,cx,cy-13);
+        ctx.fillStyle='#0a0c10';ctx.font='bold 7px monospace';ctx.textAlign='center';
+        ctx.fillText(r.idx+'',cx,cy+3);
+        ctx.fillStyle=r.dot+'cc';ctx.font='9px sans-serif';
+        ctx.fillText(r.label,cx,cy-13);
       });
     }
 
-    // ── send to server (debounced 300ms) ──
     function vtScheduleSend(){
       clearTimeout(vtSendTimer);
       vtSendTimer = setTimeout(vtSend, 300);
     }
-
     async function vtSend(){
       const poles={};
-      VT_EMOTIONS.forEach(em=>{ poles[em.key]=[em.v,em.a,em.d]; });
+      // keep server compat — send vad positions for the 4 classic emotions
+      const snap={ ang:{v:0.15,a:0.82}, hap:{v:0.85,a:0.65}, sad:{v:0.15,a:0.20}, neu:{v:0.50,a:0.40} };
+      Object.entries(snap).forEach(([k,s])=>{ poles[k]=[s.v,s.a,0.5]; });
       try{
-        const res = await fetch(`${CONFIG.SERVER}/config`,{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({poles, temperature:vtTemp})
-        });
+        const res = await fetch(`${CONFIG.SERVER}/config`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poles,temperature:vtTemp})});
         const d = await res.json();
         const el = document.getElementById('vt-status');
-        if(el) el.textContent = d.ok ? 'sent ✓ ' + new Date().toLocaleTimeString() : 'error';
-      } catch(e){
-        const el=document.getElementById('vt-status');
-        if(el) el.textContent='server unreachable';
-      }
+        if(el) el.textContent = d.ok ? 'sent ✓ '+new Date().toLocaleTimeString() : 'error';
+      }catch(e){ const el=document.getElementById('vt-status'); if(el) el.textContent='server unreachable'; }
     }
 
-    // load current config from server on open
-    fetch(`${CONFIG.SERVER}/config`)
-      .then(r=>r.json())
-      .then(d=>{
-        if(d.poles) VT_EMOTIONS.forEach(em=>{
-          const p=d.poles[em.key];
-          if(p){ em.v=p[0];em.a=p[1];em.d=p[2];
-            const sl=document.getElementById('vtd-'+em.key);
-            if(sl) document.querySelector(`#vt-d-sliders input[oninput*="${em.key}"]`).value=em.d;
-            const lbl=document.getElementById('vtd-'+em.key);
-            if(lbl) lbl.textContent=em.d.toFixed(2);
-          }
-        });
-        if(d.temperature){
-          vtTemp=d.temperature;
-          document.getElementById('vt-temp').value=vtTemp;
-          document.getElementById('vt-temp-val').textContent=vtTemp.toFixed(2);
-        }
-      }).catch(()=>{});
+    // load server config on open (temperature only — regions are client-only now)
+    fetch(`${CONFIG.SERVER}/config`).then(r=>r.json()).then(d=>{
+      if(d.temperature){ vtTemp=d.temperature; const el=document.getElementById('vt-temp'); if(el) el.value=vtTemp; const ev=document.getElementById('vt-temp-val'); if(ev) ev.textContent=vtTemp.toFixed(2); }
+    }).catch(()=>{});
 
-    // expose helpers to window for inline oninput handlers
-    window.vtSetD = function(key, val){
-      const em=VT_EMOTIONS.find(e=>e.key===key);
-      em.d=val;
-      const lbl=document.getElementById('vtd-'+key);
+    window.vtSetCol = function(idx, which, val){
+      const r=VT_REGIONS[idx];
+      if(which===0) r.col0=val; else if(which===1) r.col1=val; else r.col2=val;
+      pushRegionsToGPU();
+    };
+    window.vtSetRad2 = function(idx, val){
+      VT_REGIONS[idx].rad=val;
+      const lbl=document.getElementById('vtr2-'+idx);
       if(lbl) lbl.textContent=val.toFixed(2);
-      vtScheduleSend();
+      pushRegionsToGPU();
     };
     window.vtSetTemp = function(val){
       vtTemp=val;
-      document.getElementById('vt-temp-val').textContent=val.toFixed(2);
+      const el=document.getElementById('vt-temp-val'); if(el) el.textContent=val.toFixed(2);
       vtScheduleSend();
     };
 
-    // ── drag ──
+    // drag to reposition
     function hit(cx,cy){
-      for(const em of VT_EMOTIONS){
-        const [px,py]=toC(em.v,em.a);
-        if(Math.hypot(cx-px,cy-py)<13) return em;
-      }
+      for(const r of VT_REGIONS){ const [px,py]=toC(r.v,r.a); if(Math.hypot(cx-px,cy-py)<13) return r; }
       return null;
     }
-    function ptFromEvent(e,isTouch){
-      const r=canvas.getBoundingClientRect();
-      const src=isTouch?e.touches[0]:e;
-      return {cx:src.clientX-r.left, cy:src.clientY-r.top};
-    }
+    function ptFromEvent(e,isTouch){ const bnd=canvas.getBoundingClientRect(); const src=isTouch?e.touches[0]:e; return {cx:src.clientX-bnd.left,cy:src.clientY-bnd.top}; }
 
-    canvas.addEventListener('mousedown',e=>{
-      const {cx,cy}=ptFromEvent(e,false);
-      vtDragging=hit(cx,cy);
-    });
+    canvas.addEventListener('mousedown',e=>{ const {cx,cy}=ptFromEvent(e,false); vtDragging=hit(cx,cy); });
     canvas.addEventListener('mousemove',e=>{
       if(!vtDragging) return;
-      const {cx,cy}=ptFromEvent(e,false);
-      const pt=fromC(cx,cy);
-      vtDragging.v=Math.max(0,Math.min(1,pt.v));
-      vtDragging.a=Math.max(0,Math.min(1,pt.a));
-      vtScheduleSend();
+      const {cx,cy}=ptFromEvent(e,false); const pt=fromC(cx,cy);
+      vtDragging.v=Math.max(0,Math.min(1,pt.v)); vtDragging.a=Math.max(0,Math.min(1,pt.a));
+      pushRegionsToGPU(); vtScheduleSend();
     });
     canvas.addEventListener('mouseup',()=>vtDragging=null);
     canvas.addEventListener('mouseleave',()=>vtDragging=null);
 
-    canvas.addEventListener('touchstart',e=>{
-      e.preventDefault();
-      const {cx,cy}=ptFromEvent(e,true);
-      vtDragging=hit(cx,cy);
-    },{passive:false});
+    canvas.addEventListener('touchstart',e=>{ e.preventDefault(); const {cx,cy}=ptFromEvent(e,true); vtDragging=hit(cx,cy); },{passive:false});
     canvas.addEventListener('touchmove',e=>{
-      e.preventDefault();
-      if(!vtDragging) return;
-      const {cx,cy}=ptFromEvent(e,true);
-      const pt=fromC(cx,cy);
-      vtDragging.v=Math.max(0,Math.min(1,pt.v));
-      vtDragging.a=Math.max(0,Math.min(1,pt.a));
-      vtScheduleSend();
+      e.preventDefault(); if(!vtDragging) return;
+      const {cx,cy}=ptFromEvent(e,true); const pt=fromC(cx,cy);
+      vtDragging.v=Math.max(0,Math.min(1,pt.v)); vtDragging.a=Math.max(0,Math.min(1,pt.a));
+      pushRegionsToGPU(); vtScheduleSend();
     },{passive:false});
     canvas.addEventListener('touchend',()=>vtDragging=null);
 
-    // redraw loop at 30fps
-    setInterval(vtDraw, 33);
+    setInterval(() => {
+      const sec=document.getElementById('vad-tuner-section'); const knobs=document.getElementById('knobs');
+      if(sec && knobs && !knobs.classList.contains('hidden')) vtDraw();
+    }, 100);
   })();
+
+  // auto-load default preset on startup
+  window.addEventListener('load', () => loadPreset('default'));
   </script>
 </body>
 </html>

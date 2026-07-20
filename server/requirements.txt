@@ -4,3 +4,7 @@ numpy
 torch
 torchvision
 torchaudio
+groq
+librosa
+safetensors
+transformers

@@ -1,0 +1,94 @@
+{
+  "_note": "Saved from browser — 2026-07-20T07:52:39.184Z (patched for colorBand + new colour system)",
+  "_date": "2026-07-20",
+
+  "fftRoute": {
+    "volume":         { "dst": "blobSize",    "mul":  0.85 },
+    "bass":           { "dst": "bass",        "mul": -1.00 },
+    "midrange":       { "dst": "volume",      "mul":  0.85 },
+    "presence":       { "dst": "colorRadius", "mul":  1.90 },
+    "brightness":     { "dst": "none",        "mul":  1.00 },
+    "tone":           { "dst": "colorRadius", "mul":  2.15 },
+    "texture":        { "dst": "texture",     "mul":  1.00 },
+    "movement":       { "dst": "spread",      "mul":  3.50 },
+    "spread":         { "dst": "none",        "mul":  1.00 },
+    "f0":             { "dst": "brightness",  "mul":  2.15 },
+    "f0delta":        { "dst": "speed",       "mul":  1.00 },
+    "f0confidence":   { "dst": "tone",        "mul":  1.00 },
+    "tilt":           { "dst": "none",        "mul":  1.00 },
+    "spectralSpread": { "dst": "none",        "mul":  1.00 }
+  },
+
+  "modelRoute": {
+    "neu": { "dst": "none",      "mul": 1 },
+    "hap": { "dst": "colorTemp", "mul": 1 },
+    "ang": { "dst": "bass",      "mul": 1 },
+    "sad": { "dst": "fog",       "mul": 1 }
+  },
+
+  "gfxLock": {
+    "volume":      false,
+    "brightness":  false,
+    "tone":        false,
+    "movement":    true,
+    "texture":     false,
+    "bass":        false,
+    "spread":      false,
+    "colorTemp":   false,
+    "speed":       false,
+    "blobSize":    false,
+    "fog":         false,
+    "saturation":  false,
+    "colorRadius": false,
+    "hueShift":    false,
+    "colorBand":   false
+  },
+
+  "gfxManual": {
+    "volume":      1.00,
+    "brightness":  1.00,
+    "tone":        0.00,
+    "movement":    0.76,
+    "texture":     0.00,
+    "bass":        1.00,
+    "spread":      0.33,
+    "colorTemp":   0.50,
+    "speed":       0.01,
+    "blobSize":    4.24,
+    "fog":         0.00,
+    "saturation":  1.00,
+    "colorRadius": 0.74,
+    "hueShift":    0.00,
+    "colorBand":   0.70
+  },
+
+  "gfxLerp": {
+    "volume":      1.00,
+    "brightness":  0.20,
+    "tone":        0.08,
+    "movement":    0.35,
+    "texture":     0.10,
+    "bass":        0.70,
+    "spread":      0.07,
+    "colorTemp":   0.03,
+    "speed":       0.60,
+    "blobSize":    0.70,
+    "fog":         0.02,
+    "saturation":  0.05,
+    "colorRadius": 0.50,
+    "hueShift":    0.06,
+    "colorBand":   0.20
+  },
+
+  "smoothing": {
+    "shapeLerp":   0.13,
+    "moodLerp":    0.020,
+    "emotionLerp": 0.060,
+    "fftAlpha":    0.04
+  },
+
+  "groq": {
+    "everyN":  1,
+    "holdMs":  6000
+  }
+}
