@@ -107,6 +107,7 @@ def _clean_quote(text: str) -> str:
 
 # async text generation — runs in background thread, result cached
 _text_cache    = ""
+_text_last_sent = ""             # last quote actually delivered to the client
 _text_lock     = threading.Lock()
 _text_pending  = False
 _recent_quotes: list[str] = []   # full "quote — Author" strings
@@ -179,8 +180,8 @@ def _generate_groq_async(v: float, a: float, d: float):
         _text_pending = False
 
 def generate_text(v: float, a: float, d: float) -> str:
-    """Return cached text immediately, fire async refresh in background."""
-    global _text_pending
+    """Return the quote only when it's new — empty string means client shows nothing."""
+    global _text_pending, _text_last_sent
     if GROQ_AVAILABLE and not _text_pending:
         _text_pending = True
         t = threading.Thread(
@@ -190,9 +191,10 @@ def generate_text(v: float, a: float, d: float) -> str:
         )
         t.start()
     with _text_lock:
-        if _text_cache:
+        if _text_cache and _text_cache != _text_last_sent:
+            _text_last_sent = _text_cache
             return _text_cache
-    return _fragment_fallback(v, a, d)
+    return ""
 
 # ── fragment bank fallback ─────────────────────────────────────────────────────
 # Used when Groq is unavailable or on the first call before response arrives.
