@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
+# Build the Synesthesia Docker image and export it as a portable tarball.
+# Run this on your development machine before copying to a USB drive.
 set -e
 cd "$(dirname "$0")"
 
 echo "═══════════════════════════════════════════════"
-echo "  Synesthesia — build Docker image"
+echo "  Synesthesia — build"
 echo "═══════════════════════════════════════════════"
 
 HF_CACHE="$HOME/.cache/huggingface/hub"
 MODEL_CACHE="./model_cache"
 
-# ── copy model weights into build context ─────────────────────────────────────
-echo "[1/3] copying model weights into build context..."
+# ── 1. copy model weights into build context ──────────────────────────────────
+echo "[1/4] copying model weights..."
 rm -rf "$MODEL_CACHE"
 mkdir -p "$MODEL_CACHE"
 
@@ -22,24 +24,33 @@ do
     echo "  → $MODEL"
     cp -r "$HF_CACHE/$MODEL" "$MODEL_CACHE/"
   else
-    echo "  ✗ $MODEL not found in $HF_CACHE — run the server once first to download it"
+    echo "  ✗ $MODEL not found in $HF_CACHE"
+    echo "    Start the server once to download it, then re-run build.sh"
     exit 1
   fi
 done
 
-# ── build Docker image ────────────────────────────────────────────────────────
-echo "[2/3] building Docker image (this takes a few minutes first time)..."
+# ── 2. build Docker image ─────────────────────────────────────────────────────
+echo "[2/4] building Docker image..."
 docker build -t synesthesia:latest .
 
-# ── clean up build context ─────────────────────────────────────────────────────
-echo "[3/3] cleaning up..."
+# ── 3. clean up build context ─────────────────────────────────────────────────
+echo "[3/4] cleaning up build context..."
 rm -rf "$MODEL_CACHE"
 
+# ── 4. export tarball for USB distribution ────────────────────────────────────
+echo "[4/4] exporting synesthesia.tar.gz (this takes a minute)..."
+docker save synesthesia:latest | gzip > synesthesia.tar.gz
+
 echo ""
-echo "✓ Docker image built: synesthesia:latest"
+echo "✓ Done."
 echo ""
-echo "To test: docker run --rm -p 5001:5001 synesthesia:latest"
-echo "Then open client/index.html in your browser."
+echo "USB contents needed:"
+echo "  synesthesia.tar.gz  ($(du -sh synesthesia.tar.gz | cut -f1))"
+echo "  .env                (with GROQ_API_KEY=...)"
+echo "  install.command     (Mac)"
+echo "  install.bat         (Windows)"
 echo ""
-echo "To build the Electron app:"
-echo "  cd electron && npm install && npm run build:mac"
+echo "To test locally:"
+echo "  docker run --rm -p 5001:5001 --env-file .env synesthesia:latest"
+echo "  open http://localhost:5001"

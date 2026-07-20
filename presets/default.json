@@ -1,6 +1,6 @@
 {
-  "_note": "Default startup state — v2 session 2026-07-20",
-  "_date": "2026-07-20",
+  "_note": "Default startup state — v4 session 2026-07-21",
+  "_date": "2026-07-21",
 
   "fftRoute": {
     "volume":         { "dst": "blobSize",    "mul":  0.85 },
@@ -13,10 +13,10 @@
     "movement":       { "dst": "brightness",  "mul":  1.70 },
     "spread":         { "dst": "none",        "mul":  1.00 },
     "f0":             { "dst": "spread",      "mul":  0.95 },
-    "f0delta":        { "dst": "speed",       "mul":  1.00 },
+    "f0delta":        { "dst": "speed",       "mul":  0.60 },
     "f0confidence":   { "dst": "tone",        "mul":  1.00 },
-    "tilt":           { "dst": "none",        "mul":  1.00 },
-    "spectralSpread": { "dst": "colorBand",   "mul":  4.00 }
+    "tilt":           { "dst": "hueShift",    "mul":  1.00 },
+    "spectralSpread": { "dst": "colorBand",   "mul":  1.25 }
   },
 
   "modelRoute": {
@@ -40,7 +40,7 @@
     "fog":         true,
     "saturation":  true,
     "colorRadius": false,
-    "hueShift":    false,
+    "hueShift":    true,
     "colorBand":   false
   },
 
@@ -57,7 +57,7 @@
     "blobSize":    4.24,
     "fog":         0.00,
     "saturation":  1.00,
-    "colorRadius": 0.74,
+    "colorRadius": 2.00,
     "hueShift":    0.00,
     "colorBand":   0.70
   },

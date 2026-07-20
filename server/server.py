@@ -41,7 +41,8 @@ else:
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'vox_src'))
 from model.emotion.wavlm_emotion_dim import WavLMWrapper
 
-app = Flask(__name__)
+_CLIENT_DIR = os.path.join(os.path.dirname(__file__), '..', 'client')
+app = Flask(__name__, static_folder=_CLIENT_DIR, static_url_path='')
 CORS(app)
 
 # ── WavLM dimensional emotion model (Interspeech 2025, MSP-Podcast) ───────────
@@ -290,6 +291,10 @@ def vad_to_probs(valence: float, arousal: float, dominance: float) -> dict:
 
 
 _PRESETS_DIR = os.path.join(os.path.dirname(__file__), '..', 'presets')
+
+@app.route("/")
+def serve_index():
+    return app.send_static_file('index.html')
 
 @app.route("/presets/<path:filename>")
 def serve_preset(filename):

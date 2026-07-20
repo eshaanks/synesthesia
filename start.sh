@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the Synesthesia installation: Flask server + static file server + browser
+# Dev launcher — runs Flask directly (no Docker)
 set -e
 cd "$(dirname "$0")"
 
@@ -12,36 +12,24 @@ if [ ! -f "$PYTHON" ]; then
   exit 1
 fi
 
-# kill any stale instances
 pkill -f "server/server.py" 2>/dev/null || true
-pkill -f "http.server 8000" 2>/dev/null || true
 sleep 0.5
 
-echo "[1/2] starting Flask server on :5001..."
+echo "Starting Flask server on :5001 (serves client + API)..."
 cd server
 "$PYTHON" server.py &
 SERVER_PID=$!
 cd ..
 
-echo "[2/2] starting client on :8000..."
-"$PYTHON" -m http.server 8000 --directory client &
-CLIENT_PID=$!
-
-# wait for server to be ready
-echo "waiting for server..."
+echo "Waiting for server..."
 for i in $(seq 1 20); do
   curl -sf http://localhost:5001/health > /dev/null 2>&1 && break
   sleep 0.5
 done
 
 echo ""
-echo "✓ Synesthesia running"
-echo "  Flask:  http://localhost:5001"
-echo "  Client: http://localhost:8000"
-echo ""
-echo "Opening browser..."
-open http://localhost:8000
+echo "✓ Synesthesia running at http://localhost:5001"
+open http://localhost:5001
 
-echo "Press Ctrl+C to stop."
-trap "kill $SERVER_PID $CLIENT_PID 2>/dev/null; echo 'stopped.'" INT TERM
+trap "kill $SERVER_PID 2>/dev/null; echo stopped." INT TERM
 wait
