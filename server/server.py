@@ -120,15 +120,21 @@ def _generate_groq_async(v: float, a: float, d: float):
             recent = list(_recent_quotes)
         avoid = "\n\nDo not use any of these quotes — they were shown recently:\n" + \
                 "\n".join(f"- {q}" for q in recent) if recent else ""
-        resp = _groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT + avoid},
-                {"role": "user",   "content": context},
-            ],
-            max_tokens=60,
-            temperature=0.85,
-        )
+        msgs = [
+            {"role": "system", "content": SYSTEM_PROMPT + avoid},
+            {"role": "user",   "content": context},
+        ]
+        try:
+            resp = _groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=msgs, max_tokens=60, temperature=0.85,
+            )
+        except Exception:
+            # fall back to 8b if 70b is rate-limited
+            resp = _groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=msgs, max_tokens=60, temperature=0.85,
+            )
         text = _clean_quote(resp.choices[0].message.content.strip())
         with _text_lock:
             _text_cache = text

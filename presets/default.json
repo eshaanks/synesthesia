@@ -88,7 +88,7 @@
   },
 
   "groq": {
-    "everyN":  1,
-    "holdMs":  6000
+    "everyN":  3,
+    "holdMs":  8000
   }
 }
