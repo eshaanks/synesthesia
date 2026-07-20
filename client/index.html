@@ -187,16 +187,10 @@
         <div class="panel-section" style="background:var(--bg-0); border-top:1px solid var(--line);">
           <div class="panel-title" style="color:#67e8f9;">
             Text Generation
-            <span class="sub">Groq LLM rate control</span>
+            <span class="sub">Quote display timing</span>
           </div>
           <div class="mood-row">
-            <div class="p-label">Text Rate<small>chunks between Groq calls</small></div>
-            <input type="range" min="1" max="20" step="1" value="1"
-              oninput="window.GROQ_EVERY=+this.value; document.getElementById('val-groq-rate').textContent=+this.value">
-            <div class="p-value" id="val-groq-rate">1</div>
-          </div>
-          <div class="mood-row">
-            <div class="p-label">Text Hold<small>seconds before fade</small></div>
+            <div class="p-label">Text Hold<small>seconds on screen before fade</small></div>
             <input type="range" min="2" max="30" step="1" value="6"
               oninput="window.GROQ_HOLD_MS=(+this.value)*1000; document.getElementById('val-groq-hold').textContent=+this.value+'s'">
             <div class="p-value" id="val-groq-hold">6s</div>

@@ -1,7 +1,4 @@
 let stream, recording = false;
-let _chunkCount = 0;
-
-window.GROQ_EVERY   = 1;     // show text every N chunks (1 = every chunk)
 window.GROQ_HOLD_MS = 6000;  // ms before text fades
 
 async function toggleMic(){
@@ -72,9 +69,8 @@ async function sendChunk(blob){
       window.vadTarget.a = data.vad[1];
     }
 
-    _chunkCount++;
-    const every = (window.GROQ_EVERY > 0) ? window.GROQ_EVERY : 1;
-    if(data.question && (_chunkCount % every === 0)) showQuestion(data.question);
+    // server only sends data.question when the quote is genuinely new
+    if(data.question) showQuestion(data.question);
 
     const top = data.emotion_word || data.emotion || '?';
     const probStr = data.probs
