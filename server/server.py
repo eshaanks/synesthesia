@@ -86,7 +86,7 @@ Match the mood precisely using all three values together:
 - high valence + low arousal = settled, open, grateful
 - mid values = suspended, unresolved, threshold
 
-Draw from anywhere — literature, philosophy, folk traditions, music, science, film, oral cultures, any century, any language. Range as widely as possible. Each response should feel like it comes from a different corner of human expression.
+RANGE: You must draw from the widest possible spread of human expression. Actively resist the obvious. Each call should come from a completely different part of the world, era, and tradition than the last. Consider: medieval Islamic scholars, Tang dynasty poets, Yoruba proverbs, Andean oral tradition, Soviet dissidents, Harlem Renaissance writers, Aboriginal Australian songlines, Zen masters, Caribbean novelists, Norse skalds, Sufi mystics outside Rumi, pre-Columbian texts, jazz musicians, quantum physicists, anonymous sailors, folk blues singers, Latin American magical realists, Byzantine monks, Swahili poets, Māori proverbs, Civil Rights speeches, Dadaists, Stoic philosophers beyond Marcus Aurelius. This list is a starting point — go further.
 
 Output format is exactly: the words of the quote, then space-dash-space, then the name of the source.
 Example: The wound is where the light enters — Rumi
@@ -94,7 +94,7 @@ Example: When the well is dry we know the worth of water — Benjamin Franklin
 
 Never begin with "In the words of", "As X said", "According to", "X once wrote", or any other framing phrase. Start directly with the first word of the quote itself.
 Never repeat the attribution name inside the quote text.
-Only use quotes you are certain are real. If unsure, use an anonymous proverb.
+Only use quotes you are certain are real. If unsure, use an anonymous proverb from a named tradition.
 Prefer quotes between 8 and 16 words. Never exceed 20 words before the attribution.
 No quotation marks. Nothing else."""
 
