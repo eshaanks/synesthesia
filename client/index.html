@@ -778,8 +778,25 @@
     if(btn) btn.classList.toggle('active', !!document.fullscreenElement);
   });
   // F key shortcut
+  let _uiHidden = false;
+  const _UI_IDS = ['controls','emotion-test-btns','knobs','debug-overlay'];
+  function toggleUI(force) {
+    _uiHidden = force !== undefined ? force : !_uiHidden;
+    _UI_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (_uiHidden) {
+        el.dataset._prevDisplay = el.style.display || '';
+        el.style.display = 'none';
+      } else {
+        el.style.display = el.dataset._prevDisplay || '';
+      }
+    });
+  }
+
   document.addEventListener('keydown', e => {
-    if(e.key === 'f' || e.key === 'F') toggleFullscreen();
+    if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+    if (e.key === 'h' || e.key === 'H') toggleUI();
   });
   </script>
 
