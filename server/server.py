@@ -86,7 +86,7 @@ Match the mood precisely using all three values together:
 - high valence + low arousal = settled, open, grateful
 - mid values = suspended, unresolved, threshold
 
-RANGE: You must draw from the widest possible spread of human expression. Actively resist the obvious. Each call should come from a completely different part of the world, era, and tradition than the last. Consider: medieval Islamic scholars, Tang dynasty poets, Yoruba proverbs, Andean oral tradition, Soviet dissidents, Harlem Renaissance writers, Aboriginal Australian songlines, Zen masters, Caribbean novelists, Norse skalds, Sufi mystics outside Rumi, pre-Columbian texts, jazz musicians, quantum physicists, anonymous sailors, folk blues singers, Latin American magical realists, Byzantine monks, Swahili poets, Māori proverbs, Civil Rights speeches, Dadaists, Stoic philosophers beyond Marcus Aurelius. This list is a starting point — go further.
+RANGE — DIVERSITY IS MANDATORY: Every response must come from a different corner of human expression than the previous ones. Rotate aggressively across: era (ancient / medieval / early-modern / 20th century / contemporary), geography (Africa, East Asia, South Asia, Americas, Middle East, Oceania, Europe — cycling, never repeating the same region consecutively), and form (poem, proverb, song lyric, letter, speech, novel, philosophy, science writing, oral tradition). Do not default to European or American sources. Actively seek: Tang dynasty poets, Yoruba proverbs, Andean oral tradition, Soviet dissidents, Harlem Renaissance writers, Aboriginal Australian songlines, Caribbean novelists, Norse skalds, Sufi mystics beyond Rumi, Aztec/Maya texts, blues singers, Latin American magical realists, Byzantine monks, Swahili coastal poetry, Māori whakataukī, pre-Islamic Arabian poets, Daoist hermits, Sikh Gurbani, Igbo proverbs, Andean quipus, Persian classical poets beyond Hafez, Inuit oral tradition, Bengal Renaissance writers. This list is a floor, not a ceiling.
 
 Output format is exactly: the words of the quote, then space-dash-space, then the name of the source.
 Example: The wound is where the light enters — Rumi
@@ -94,7 +94,7 @@ Example: When the well is dry we know the worth of water — Benjamin Franklin
 
 Never begin with "In the words of", "As X said", "According to", "X once wrote", or any other framing phrase. Start directly with the first word of the quote itself.
 Never repeat the attribution name inside the quote text.
-Only use quotes you are certain are real. If unsure, use an anonymous proverb from a named tradition.
+Only use quotes you are certain are real. If unsure, use an anonymous proverb from a named tradition (e.g. "Yoruba proverb", "Zen saying", "Māori whakataukī").
 Prefer quotes between 8 and 16 words. Never exceed 20 words before the attribution.
 No quotation marks. Nothing else."""
 
@@ -109,20 +109,40 @@ def _clean_quote(text: str) -> str:
 _text_cache    = ""
 _text_lock     = threading.Lock()
 _text_pending  = False
-_recent_quotes: list[str] = []
-_RECENT_MAX    = 12
+_recent_quotes: list[str] = []   # full "quote — Author" strings
+_recent_authors: list[str] = []  # attribution names only, blocked separately
+_RECENT_MAX    = 20              # block last 20 quotes
+_AUTHOR_MAX    = 10              # block last 10 authors regardless of quote
 _groq_model    = "none"          # tracks which model last succeeded
 
 _MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
+def _extract_author(text: str) -> str:
+    """Pull the attribution name from 'quote — Author'."""
+    idx = text.rfind(" — ")
+    return text[idx + 3:].strip() if idx >= 0 else ""
+
 def _generate_groq_async(v: float, a: float, d: float):
-    global _text_cache, _text_pending, _recent_quotes, _groq_model
+    global _text_cache, _text_pending, _recent_quotes, _recent_authors, _groq_model
     try:
         context = _describe_signal(v, a, d)
         with _text_lock:
-            recent = list(_recent_quotes)
-        avoid = "\n\nDo not use any of these quotes — they were shown recently:\n" + \
-                "\n".join(f"- {q}" for q in recent) if recent else ""
+            recent_q = list(_recent_quotes)
+            recent_a = list(_recent_authors)
+
+        avoid_parts = []
+        if recent_q:
+            avoid_parts.append(
+                "BLOCKED QUOTES — do not use these exact texts:\n" +
+                "\n".join(f"- {q}" for q in recent_q)
+            )
+        if recent_a:
+            avoid_parts.append(
+                "BLOCKED AUTHORS — do not attribute to any of these people or traditions:\n" +
+                "\n".join(f"- {a_}" for a_ in recent_a)
+            )
+        avoid = ("\n\n" + "\n\n".join(avoid_parts)) if avoid_parts else ""
+
         msgs = [
             {"role": "system", "content": SYSTEM_PROMPT + avoid},
             {"role": "user",   "content": context},
@@ -132,7 +152,7 @@ def _generate_groq_async(v: float, a: float, d: float):
         for model in _MODELS:
             try:
                 resp = _groq_client.chat.completions.create(
-                    model=model, messages=msgs, max_tokens=60, temperature=0.85,
+                    model=model, messages=msgs, max_tokens=60, temperature=0.92,
                 )
                 used_model = model
                 break
@@ -141,13 +161,18 @@ def _generate_groq_async(v: float, a: float, d: float):
         if resp is None:
             raise RuntimeError("all models failed")
         text = _clean_quote(resp.choices[0].message.content.strip())
+        author = _extract_author(text)
         with _text_lock:
             _text_cache = text
             _groq_model = used_model
             _recent_quotes.append(text)
             if len(_recent_quotes) > _RECENT_MAX:
                 _recent_quotes.pop(0)
-        print(f"[groq] {used_model} → {text[:60]}")
+            if author:
+                _recent_authors.append(author)
+                if len(_recent_authors) > _AUTHOR_MAX:
+                    _recent_authors.pop(0)
+        print(f"[groq] {used_model} → {text[:80]}")
     except Exception as e:
         print(f"[groq] error: {e}")
     finally:

@@ -233,9 +233,15 @@
 
         <!-- ── SECTION 8: TRANSIENT ────────────────────────────────────────── -->
         <div class="panel-section" style="background:var(--bg-0); border-top:1px solid var(--line);">
-          <div class="panel-title" style="color:#fbbf24;">
+          <div class="panel-title" style="color:#fbbf24; display:flex; align-items:center; gap:8px;">
             Transient
-            <span class="sub">Sudden-change impact flash</span>
+            <span id="transient-led" style="
+              display:inline-block; width:8px; height:8px; border-radius:50%;
+              background:#333; box-shadow:none;
+              transition: background 40ms, box-shadow 40ms;
+              flex-shrink:0;
+            "></span>
+            <span class="sub" style="margin-left:0;">Sudden-change impact flash</span>
           </div>
           <div class="mood-row">
             <div class="p-label">Threshold<small>lower = triggers more easily</small></div>
@@ -636,11 +642,23 @@
       gl.uniform1f(U.colorBand,   Math.min(1.0, _colourCurrent.colorBand + bandNudge));
     }
 
+    const _transLed = document.getElementById('transient-led');
+    let _ledOn = false;
+
     const _origGlobalTick = window._globalTick;
     window._globalTick = function(ts){
       if(_origGlobalTick) _origGlobalTick(ts);
       pushMoodUniforms();
       pushColourUniforms();
+      // transient LED — toggle only on state change to avoid thrashing the DOM
+      const active = !!window._transientActive;
+      if(active !== _ledOn){
+        _ledOn = active;
+        if(_transLed){
+          _transLed.style.background   = active ? '#fbbf24' : '#333';
+          _transLed.style.boxShadow    = active ? '0 0 6px 2px #fbbf2488' : 'none';
+        }
+      }
     };
 
     // ── live meters at 80ms ───────────────────────────────────────────────────
