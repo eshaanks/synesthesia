@@ -24,6 +24,21 @@
       <button onclick="setRes(854,480)"  class="res-btn" id="rb-480">480p</button>
       <button onclick="setRes(1280,720)" class="res-btn active" id="rb-720">720p</button>
       <button onclick="setRes(1920,1080)" class="res-btn" id="rb-1080">1080p</button>
+      <span class="res-label" style="margin-left:10px;">font:</span>
+      <select id="fontFamilySelect" onchange="window.textStyle.family=this.value" style="background:var(--bg-2);color:var(--txt-hi);border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;">
+        <option>Georgia</option>
+        <option>Palatino</option>
+        <option>Garamond</option>
+        <option>Didot</option>
+        <option>Baskerville</option>
+        <option>Futura</option>
+        <option>Helvetica</option>
+        <option>Courier</option>
+      </select>
+      <input id="fontSizeSlider" type="range" min="14" max="64" step="1" value="28"
+        oninput="window.textStyle.size=+this.value; document.getElementById('fontSizeVal').textContent=this.value"
+        style="width:80px;accent-color:var(--cyan);vertical-align:middle;">
+      <span id="fontSizeVal" style="font-size:11px;color:var(--txt-lo);min-width:24px;display:inline-block;">28</span>
     </div>
 
     <div id="emotion-test-btns">

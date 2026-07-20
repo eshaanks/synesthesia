@@ -92,6 +92,7 @@ Strict rules:
 - Only use quotes you are certain are real and accurately worded. If unsure, use a well-known proverb or anonymous folk saying instead.
 - Never fabricate a quote and attribute it to a real person.
 - The quote text must not contain the author's name. The attribution handles that.
+- Prefer quotes between 8 and 16 words. Never go over 20 words before the attribution.
 - One line. No quotation marks. Nothing else."""
 
 

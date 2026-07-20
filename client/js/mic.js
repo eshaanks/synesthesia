@@ -91,12 +91,30 @@ async function sendChunk(blob){
 // Text is drawn onto a 2D canvas overlay. No DOM textContent writes,
 // no layout invalidation, no reflow. Opacity is simulated via globalAlpha.
 const TYPE_CHAR_MS = 48;
-const TEXT_FONT        = 'italic 300 28px "Georgia", "Times New Roman", serif';
-const TEXT_ATTR_FONT   = '300 15px "Georgia", "Times New Roman", serif';
 const TEXT_COLOR       = 'rgba(255,255,255,0.90)';
 const TEXT_ATTR_COLOR  = 'rgba(255,255,255,0.50)';
 const TEXT_SHADOW_BLUR  = 18;
 const TEXT_SHADOW_COLOR = 'rgba(0,0,0,0.7)';
+
+// live text style — mutated by UI controls
+window.textStyle = {
+  size:   28,
+  family: 'Georgia',
+};
+
+const FONT_FAMILIES = {
+  'Georgia':     '"Georgia", "Times New Roman", serif',
+  'Palatino':    '"Palatino Linotype", "Palatino", serif',
+  'Garamond':    '"EB Garamond", "Garamond", serif',
+  'Didot':       '"Didot", "Bodoni MT", serif',
+  'Futura':      '"Futura", "Century Gothic", sans-serif',
+  'Helvetica':   '"Helvetica Neue", "Helvetica", sans-serif',
+  'Courier':     '"Courier New", monospace',
+  'Baskerville': '"Baskerville", "Libre Baskerville", serif',
+};
+
+function _bodyFont()  { return `italic 300 ${window.textStyle.size}px ${FONT_FAMILIES[window.textStyle.family] || window.textStyle.family}`; }
+function _attrFont()  { return `300 ${Math.round(window.textStyle.size * 0.54)}px ${FONT_FAMILIES[window.textStyle.family] || window.textStyle.family}`; }
 
 let _typeBusy    = false;
 let _typePending = null;
@@ -147,10 +165,12 @@ function _textDraw(alpha){
   ctx.shadowBlur   = TEXT_SHADOW_BLUR;
   ctx.shadowColor  = TEXT_SHADOW_COLOR;
 
-  // word-wrap body
-  const maxW  = Math.min(680, W * 0.72);
-  const lineH = 44;
-  ctx.font = TEXT_FONT;
+  const sz      = window.textStyle.size;
+  const bodyF   = _bodyFont();
+  const attrF   = _attrFont();
+  const lineH   = Math.round(sz * 1.55);
+  const attrSz  = Math.round(sz * 0.54);
+  const maxW    = Math.min(680, W * 0.72);
 
   function wordWrap(text, font, mW) {
     ctx.font = font;
@@ -166,15 +186,15 @@ function _textDraw(alpha){
     return lines;
   }
 
-  const bodyLines = wordWrap(body, TEXT_FONT, maxW);
-  const attrLines = attr ? wordWrap(attr, TEXT_ATTR_FONT, maxW) : [];
+  const bodyLines = wordWrap(body, bodyF, maxW);
+  const attrLines = attr ? wordWrap(attr, attrF, maxW) : [];
 
-  const totalH = bodyLines.length * lineH + (attrLines.length ? 12 + attrLines.length * 24 : 0);
-  const blockX = (W - maxW) / 2;          // left edge of centred block
-  const startY = H * 0.76 - totalH / 2;  // lower-third, vertically centred in that zone
+  const totalH = bodyLines.length * lineH + (attrLines.length ? 12 + attrLines.length * (attrSz * 1.6) : 0);
+  const blockX = (W - maxW) / 2;
+  const startY = H * 0.76 - totalH / 2;
 
   // draw body
-  ctx.font      = TEXT_FONT;
+  ctx.font      = bodyF;
   ctx.fillStyle = TEXT_COLOR;
   ctx.textAlign = 'left';
   for(let i = 0; i < bodyLines.length; i++){
@@ -183,12 +203,12 @@ function _textDraw(alpha){
 
   // draw attribution
   if(attrLines.length){
-    ctx.font      = TEXT_ATTR_FONT;
+    ctx.font      = attrF;
     ctx.fillStyle = TEXT_ATTR_COLOR;
     ctx.shadowBlur = 8;
     const attrY = startY + bodyLines.length * lineH + 14;
     for(let i = 0; i < attrLines.length; i++){
-      ctx.fillText(attrLines[i], blockX, attrY + i * 24);
+      ctx.fillText(attrLines[i], blockX, attrY + i * (attrSz * 1.6));
     }
   }
 
