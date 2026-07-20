@@ -192,8 +192,15 @@ function _textDraw(alpha){
   const bodyLines = wordWrap(body, bodyF, maxW);
   const attrLines = attr ? wordWrap(attr, attrF, maxW) : [];
 
+  // measure actual rendered width of each line to centre the block precisely
+  ctx.font = bodyF;
+  const bodyWidths = bodyLines.map(l => ctx.measureText(l).width);
+  ctx.font = attrF;
+  const attrWidths = attrLines.map(l => ctx.measureText(l).width);
+  const blockW = Math.max(...bodyWidths, ...attrWidths, 0);
+
   const totalH = bodyLines.length * lineH + (attrLines.length ? 12 + attrLines.length * (attrSz * 1.6) : 0);
-  const blockX = (W - maxW) / 2;
+  const blockX = (W - blockW) / 2;
   const startY = H * 0.76 - totalH / 2;
 
   // draw body
