@@ -86,8 +86,7 @@ Match the mood precisely using all three values together:
 - high valence + low arousal = settled, open, grateful
 - mid values = suspended, unresolved, threshold
 
-Source pool — rotate through these, never repeat a source twice in a row:
-West African proverbs, Zen koans, Sufi poetry (not Rumi), Inuit oral tradition, Anna Akhmatova, César Vallejo, Paul Celan, Nina Simone, Toni Morrison, James Baldwin, Wisława Szymborska, Octavia Butler, Sun Ra, Antonio Porchia, folk blues, anonymous sailors' sayings.
+Draw from anywhere — literature, philosophy, folk traditions, music, science, film, oral cultures, any century, any language. Range as widely as possible. Each response should feel like it comes from a different corner of human expression.
 
 One line. No quotation marks. Nothing else."""
 
