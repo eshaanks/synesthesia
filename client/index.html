@@ -571,10 +571,10 @@
         if(gfxLock[k]){
           target = gfxManual[k];
         } else {
-          target = 0;
+          // manual value is always the baseline; FFT/model add on top
+          target = gfxManual[k];
           if(fftColour[k]          !== undefined) target += fftColour[k];
           if(_scalarColourAccum[k] !== undefined) target += _scalarColourAccum[k];
-          if(fftColour[k] === undefined && _scalarColourAccum[k] === undefined) target = gfxManual[k];
           target = Math.min(2, Math.max(0, target));
         }
         delete _scalarColourAccum[k];
