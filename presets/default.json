@@ -1,5 +1,5 @@
 {
-  "_note": "Default startup state — new 6-region colour system",
+  "_note": "Default startup state — v2 session 2026-07-20",
   "_date": "2026-07-20",
 
   "fftRoute": {
@@ -10,13 +10,13 @@
     "brightness":     { "dst": "none",        "mul":  1.00 },
     "tone":           { "dst": "colorRadius", "mul":  2.15 },
     "texture":        { "dst": "texture",     "mul":  1.00 },
-    "movement":       { "dst": "spread",      "mul":  3.75 },
+    "movement":       { "dst": "brightness",  "mul":  1.70 },
     "spread":         { "dst": "none",        "mul":  1.00 },
-    "f0":             { "dst": "brightness",  "mul":  2.15 },
+    "f0":             { "dst": "spread",      "mul":  0.95 },
     "f0delta":        { "dst": "speed",       "mul":  1.00 },
     "f0confidence":   { "dst": "tone",        "mul":  1.00 },
     "tilt":           { "dst": "none",        "mul":  1.00 },
-    "spectralSpread": { "dst": "none",        "mul":  1.00 }
+    "spectralSpread": { "dst": "colorBand",   "mul":  4.00 }
   },
 
   "modelRoute": {
@@ -37,47 +37,47 @@
     "colorTemp":   false,
     "speed":       false,
     "blobSize":    false,
-    "fog":         false,
-    "saturation":  false,
+    "fog":         true,
+    "saturation":  true,
     "colorRadius": false,
     "hueShift":    false,
     "colorBand":   false
   },
 
   "gfxManual": {
-    "volume":      0.07,
-    "brightness":  0.15,
-    "tone":        0.27,
+    "volume":      1.00,
+    "brightness":  1.00,
+    "tone":        0.00,
     "movement":    0.76,
-    "texture":     0.13,
-    "bass":        0.91,
-    "spread":      0.06,
+    "texture":     0.00,
+    "bass":        1.00,
+    "spread":      0.33,
     "colorTemp":   0.50,
-    "speed":       0.40,
-    "blobSize":    1.28,
+    "speed":       0.01,
+    "blobSize":    4.24,
     "fog":         0.00,
     "saturation":  1.00,
-    "colorRadius": 1.00,
+    "colorRadius": 0.74,
     "hueShift":    0.00,
     "colorBand":   0.70
   },
 
   "gfxLerp": {
     "volume":      1.00,
-    "brightness":  0.60,
-    "tone":        0.08,
+    "brightness":  0.20,
+    "tone":        0.70,
     "movement":    0.35,
     "texture":     0.10,
     "bass":        0.70,
-    "spread":      0.50,
+    "spread":      0.20,
     "colorTemp":   0.03,
     "speed":       0.60,
     "blobSize":    0.70,
     "fog":         0.02,
     "saturation":  0.05,
-    "colorRadius": 0.50,
-    "hueShift":    0.06,
-    "colorBand":   0.20
+    "colorRadius": 0.90,
+    "hueShift":    0.90,
+    "colorBand":   0.90
   },
 
   "smoothing": {

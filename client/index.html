@@ -558,27 +558,31 @@
         }
       });
     }
-    // ── push colour wheel params (colorRadius, hueShift) each frame ──────────
+    // ── push colour wheel params (colorRadius, hueShift, colorBand) each frame ──
+    const _colourCurrent = { colorRadius: 0.74, hueShift: 0.0, colorBand: 0.7 };
+
     function pushColourUniforms(){
       if(typeof U === 'undefined' || typeof gl === 'undefined') return;
       gl.useProgram(prog);
 
       const fftColour = window._fftMoodAccum || {};
       ['colorRadius','hueShift','colorBand'].forEach(k => {
-        let v;
+        let target;
         if(gfxLock[k]){
-          v = gfxManual[k];
+          target = gfxManual[k];
         } else {
-          v = 0;
-          if(fftColour[k]          !== undefined) v += fftColour[k];
-          if(_scalarColourAccum[k] !== undefined) v += _scalarColourAccum[k];
-          if(fftColour[k] === undefined && _scalarColourAccum[k] === undefined) v = gfxManual[k];
-          v = Math.min(2, Math.max(0, v));
+          target = 0;
+          if(fftColour[k]          !== undefined) target += fftColour[k];
+          if(_scalarColourAccum[k] !== undefined) target += _scalarColourAccum[k];
+          if(fftColour[k] === undefined && _scalarColourAccum[k] === undefined) target = gfxManual[k];
+          target = Math.min(2, Math.max(0, target));
         }
         delete _scalarColourAccum[k];
-        if(k === 'colorRadius') gl.uniform1f(U.colorRadius, v);
-        if(k === 'hueShift')    gl.uniform1f(U.hueShift,    v);
-        if(k === 'colorBand')   gl.uniform1f(U.colorBand,   v);
+        const a = gfxLerp[k] ?? 0.5;
+        _colourCurrent[k] += (target - _colourCurrent[k]) * a;
+        if(k === 'colorRadius') gl.uniform1f(U.colorRadius, _colourCurrent[k]);
+        if(k === 'hueShift')    gl.uniform1f(U.hueShift,    _colourCurrent[k]);
+        if(k === 'colorBand')   gl.uniform1f(U.colorBand,   _colourCurrent[k]);
       });
     }
 

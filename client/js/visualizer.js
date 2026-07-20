@@ -30,7 +30,7 @@ const SIGNALS = [
 // ── all graphical targets (shape + mood + colour) in one flat pool ────────────
 const SHAPE_KEYS      = ['brightness','tone','movement','texture','volume','bass','spread'];
 const MOOD_KEYS_POOL  = ['colorTemp','speed','blobSize','fog','saturation'];
-const COLOUR_KEYS_POOL= ['colorRadius','hueShift'];
+const COLOUR_KEYS_POOL= ['colorRadius','hueShift','colorBand'];
 const ALL_GFX_TARGETS = [...SHAPE_KEYS, ...MOOD_KEYS_POOL, ...COLOUR_KEYS_POOL];
 
 // ── default routing — each signal maps to the gfx target of the same name or none
