@@ -1,0 +1,98 @@
+{
+  "_note": "Live session state — full signal routing + GFX pipeline captured",
+  "_date": "2026-07-19",
+
+  "fftRoute": {
+    "volume":         { "dst": "blobSize",    "mul": 0.85 },
+    "bass":           { "dst": "bass",        "mul": -1.00 },
+    "midrange":       { "dst": "speed",       "mul": 1.00 },
+    "presence":       { "dst": "colorRadius", "mul": 4.00 },
+    "brightness":     { "dst": "brightness",  "mul": 1.00 },
+    "tone":           { "dst": "tone",        "mul": 0.40 },
+    "texture":        { "dst": "texture",     "mul": 1.00 },
+    "movement":       { "dst": "volume",      "mul": 1.00 },
+    "spread":         { "dst": "none",        "mul": 1.00 },
+    "f0":             { "dst": "none",        "mul": 1.00 },
+    "f0delta":        { "dst": "volume",      "mul": 0.65 },
+    "f0confidence":   { "dst": "tone",        "mul": -1.50 },
+    "tilt":           { "dst": "none",        "mul": 1.00 },
+    "spectralSpread": { "dst": "none",        "mul": 1.00 }
+  },
+
+  "modelRoute": {
+    "neu": { "dst": "none",      "mul": 1 },
+    "hap": { "dst": "colorTemp", "mul": 1 },
+    "ang": { "dst": "bass",      "mul": 1 },
+    "sad": { "dst": "fog",       "mul": 1 }
+  },
+
+  "gfxLock": {
+    "volume":      false,
+    "brightness":  false,
+    "tone":        false,
+    "movement":    true,
+    "texture":     false,
+    "bass":        false,
+    "spread":      false,
+    "colorTemp":   false,
+    "speed":       false,
+    "blobSize":    false,
+    "fog":         false,
+    "saturation":  false,
+    "colorRadius": true,
+    "hueShift":    false
+  },
+
+  "gfxManual": {
+    "volume":      0.83,
+    "brightness":  0.08,
+    "tone":        0.55,
+    "movement":    0.76,
+    "texture":     0.77,
+    "bass":        0.99,
+    "spread":      0.50,
+    "colorTemp":   0.50,
+    "speed":       4.00,
+    "blobSize":    4.10,
+    "fog":         0.00,
+    "saturation":  1.00,
+    "colorRadius": 0.00,
+    "hueShift":    0.00
+  },
+
+  "gfxLerp": {
+    "volume":      0.25,
+    "brightness":  0.12,
+    "tone":        0.80,
+    "movement":    0.35,
+    "texture":     0.10,
+    "bass":        0.70,
+    "spread":      null,
+    "colorTemp":   0.03,
+    "speed":       0.80,
+    "blobSize":    0.70,
+    "fog":         0.02,
+    "saturation":  0.05,
+    "colorRadius": 0.50,
+    "hueShift":    0.06
+  },
+
+  "vadPoles": {
+    "ang": { "hue": 0.97, "rad": 0.45, "dom": 0.70 },
+    "hap": { "hue": 0.44, "rad": 0.45, "dom": 0.60 },
+    "sad": { "hue": 0.57, "rad": 0.45, "dom": 0.35 },
+    "neu": { "hue": 0.78, "rad": 0.45, "dom": 0.50 }
+  },
+
+  "smoothing": {
+    "shapeLerp":    0.12,
+    "moodLerp":     0.020,
+    "emotionLerp":  0.060,
+    "fftAlpha":     0.08
+  },
+
+  "groq": {
+    "everyN":   1,
+    "holdMs":   6000
+  }
+}

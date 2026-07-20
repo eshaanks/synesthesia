@@ -27,3 +27,6 @@ embeddings/
 *.bmp
 *.tiff
 .env
+node_modules/
+wav2vec2_checkpoints/
+model_cache/

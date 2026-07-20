@@ -1,0 +1,14 @@
+client/
+electron/
+dataset/
+embeddings/
+full_dataset/
+test_dataset/
+wav2vec2_checkpoints/
+assets/
+dist/
+node_modules/
+__pycache__/
+*.pyc
+.git/
+CLAUDE_CONTEXT.md

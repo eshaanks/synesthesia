@@ -1,0 +1,87 @@
+{
+  "_note": "Working baseline — good vocal response, locked tone+speed, singing-focused routing",
+  "_date": "2026-07-19",
+
+  "fftRoute": {
+    "volume":     { "dst": "blobSize",   "mul": 1.0 },
+    "bass":       { "dst": "bass",       "mul": 1.0 },
+    "sub":        { "dst": "none",       "mul": 1.0 },
+    "midrange":   { "dst": "spread",     "mul": 1.0 },
+    "presence":   { "dst": "none",       "mul": 1.0 },
+    "brightness": { "dst": "brightness", "mul": 1.0 },
+    "tone":       { "dst": "movement",   "mul": 1.0 },
+    "clarity":    { "dst": "none",       "mul": 1.0 },
+    "texture":    { "dst": "texture",    "mul": 1.0 },
+    "movement":   { "dst": "volume",     "mul": 1.0 },
+    "attack":     { "dst": "none",       "mul": 1.0 },
+    "spread":     { "dst": "none",       "mul": 1.0 }
+  },
+
+  "gfxLock": {
+    "volume":      false,
+    "brightness":  false,
+    "tone":        true,
+    "movement":    true,
+    "texture":     false,
+    "bass":        false,
+    "spread":      false,
+    "colorTemp":   false,
+    "speed":       true,
+    "blobSize":    false,
+    "fog":         false,
+    "saturation":  false,
+    "colorRadius": false,
+    "hueShift":    false
+  },
+
+  "gfxManual": {
+    "volume":      0.07,
+    "brightness":  0.33,
+    "tone":        0.49,
+    "movement":    0.44,
+    "texture":     0.39,
+    "bass":        0.39,
+    "spread":      0.31,
+    "colorTemp":   0.50,
+    "speed":       3.40,
+    "blobSize":    1.02,
+    "fog":         0.00,
+    "saturation":  1.00,
+    "colorRadius": 0.50,
+    "hueShift":    0.00
+  },
+
+  "gfxLerp": {
+    "volume":      1.0,
+    "brightness":  1.0,
+    "tone":        1.0,
+    "movement":    1.0,
+    "texture":     0.1,
+    "bass":        0.8,
+    "spread":      null,
+    "colorTemp":   0.03,
+    "speed":       0.04,
+    "blobSize":    0.6,
+    "fog":         0.02,
+    "saturation":  0.05,
+    "colorRadius": 0.08,
+    "hueShift":    0.06
+  },
+
+  "gpuReadouts": {
+    "volume":      0.07,
+    "brightness":  0.33,
+    "tone":        0.49,
+    "movement":    0.44,
+    "texture":     0.39,
+    "bass":        0.39,
+    "spread":      0.31,
+    "colorTemp":   0.50,
+    "speed":       3.40,
+    "blobSize":    1.02,
+    "fog":         0.00,
+    "saturation":  1.00,
+    "colorRadius": 0.50,
+    "hueShift":    0.00
+  }
+}

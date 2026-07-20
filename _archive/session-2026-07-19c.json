@@ -1,0 +1,98 @@
+{
+  "_note": "Current setting — pitch driving arm width, happy → saturation, grain inverted",
+  "_date": "2026-07-19",
+
+  "fftRoute": {
+    "volume":         { "dst": "blobSize",    "mul":  0.60 },
+    "bass":           { "dst": "bass",        "mul": -1.00 },
+    "midrange":       { "dst": "speed",       "mul":  1.00 },
+    "presence":       { "dst": "colorRadius", "mul":  4.00 },
+    "brightness":     { "dst": "brightness",  "mul":  1.00 },
+    "tone":           { "dst": "none",        "mul":  0.40 },
+    "texture":        { "dst": "texture",     "mul": -1.35 },
+    "movement":       { "dst": "volume",      "mul":  1.00 },
+    "spread":         { "dst": "none",        "mul":  1.00 },
+    "f0":             { "dst": "spread",      "mul":  1.15 },
+    "f0delta":        { "dst": "volume",      "mul":  0.65 },
+    "f0confidence":   { "dst": "tone",        "mul":  1.30 },
+    "tilt":           { "dst": "none",        "mul":  1.00 },
+    "spectralSpread": { "dst": "none",        "mul":  1.00 }
+  },
+
+  "modelRoute": {
+    "neu": { "dst": "none",       "mul": 1 },
+    "hap": { "dst": "saturation", "mul": 1 },
+    "ang": { "dst": "none",       "mul": 1 },
+    "sad": { "dst": "none",       "mul": 1 }
+  },
+
+  "gfxLock": {
+    "volume":      false,
+    "brightness":  false,
+    "tone":        false,
+    "movement":    true,
+    "texture":     false,
+    "bass":        false,
+    "spread":      false,
+    "colorTemp":   false,
+    "speed":       false,
+    "blobSize":    false,
+    "fog":         false,
+    "saturation":  false,
+    "colorRadius": false,
+    "hueShift":    false
+  },
+
+  "gfxManual": {
+    "volume":      0.70,
+    "brightness":  0.07,
+    "tone":        0.56,
+    "movement":    0.63,
+    "texture":     0.09,
+    "bass":        0.98,
+    "spread":      0.87,
+    "colorTemp":   0.50,
+    "speed":       3.76,
+    "blobSize":    1.80,
+    "fog":         0.00,
+    "saturation":  1.00,
+    "colorRadius": 0.00,
+    "hueShift":    0.00
+  },
+
+  "gfxLerp": {
+    "volume":      0.70,
+    "brightness":  0.12,
+    "tone":        0.80,
+    "movement":    0.35,
+    "texture":     0.80,
+    "bass":        0.20,
+    "spread":      0.30,
+    "colorTemp":   0.03,
+    "speed":       0.40,
+    "blobSize":    0.80,
+    "fog":         0.02,
+    "saturation":  1.00,
+    "colorRadius": 0.50,
+    "hueShift":    0.06
+  },
+
+  "vadPoles": {
+    "ang": { "hue": 0.97, "rad": 0.45, "dom": 0.70 },
+    "hap": { "hue": 0.44, "rad": 0.45, "dom": 0.60 },
+    "sad": { "hue": 0.57, "rad": 0.45, "dom": 0.35 },
+    "neu": { "hue": 0.78, "rad": 0.45, "dom": 0.50 }
+  },
+
+  "smoothing": {
+    "shapeLerp":   0.12,
+    "moodLerp":    0.020,
+    "emotionLerp": 0.060,
+    "fftAlpha":    0.08
+  },
+
+  "groq": {
+    "everyN":  1,
+    "holdMs":  6000
+  }
+}
