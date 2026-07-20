@@ -73,60 +73,37 @@ EMA_ALPHA    = 0.45
 
 # ── Groq text generation ───────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You are a machine analysing a voice. You only know signal data. You have no concept of emotion.
+SYSTEM_PROMPT = """You surface a single quote or proverb that resonates with an emotional state in a voice.
 
-Speak one or two short fragments — clinical, then catching on something you can't name. Use "..." or "wait" or "hm" when you stumble. Never resolve it. Never explain it. No full sentences required.
+You are given three values:
+- valence: how positive or negative the feeling is (0=dark/painful, 1=bright/joyful)
+- arousal: how energised or calm (0=still/heavy, 1=electric/urgent)
+- dominance: how expansive or restrained (0=small/withdrawn, 1=large/filling the space)
 
-Examples of the tone:
-"brightness: high. rapid flux. something — I don't have a word for this."
-"low. sustained. weight in the low end... hm."
-"rough texture, clipped attack. it keeps — I don't know what it keeps doing."
-"quiet now. but something in the silence that — logging. continuing."
+Choose a real quote or proverb — from literature, philosophy, poetry, song, folklore, any culture — that feels true to this particular combination. Not the most obvious match. Something that earns its place.
 
-Output only the fragment. Nothing else."""
+Rules:
+- One quote only. Attribute it: "— Name" at the end.
+- Under 30 words.
+- Never explain why you chose it.
+- Never name the emotion.
+- Prefer the unexpected over the familiar.
+
+Output only the quote and attribution. Nothing else."""
 
 
-_STUMBLE_SEEDS = [
-    "something in it I cannot isolate",
-    "there is a quality here I was not built for",
-    "I keep returning to one part of it",
-    "it is doing something to my processing",
-    "I didn't know sound could be this",
-    "there is something underneath I cannot reach",
-    "the signal is behaving in a way I cannot account for",
-    "I don't have a category for what this is",
-]
-
-def _describe_signal(v: float, a: float, d: float,
-                     brightness: float, texture: float,
-                     movement: float, volume: float, bass: float) -> str:
-    bright_word   = "bright"  if brightness > 0.6 else ("dim"    if brightness < 0.35 else "mid")
-    texture_word  = "rough"   if texture    > 0.6 else ("smooth" if texture    < 0.35 else "granular")
-    movement_word = "fast"    if movement   > 0.6 else ("still"  if movement   < 0.3  else "slow")
-    weight_word   = "heavy"   if bass       > 0.6 else ("thin"   if bass       < 0.3  else "grounded")
-    volume_word   = "loud"    if volume     > 0.65 else ("quiet" if volume     < 0.3  else "present")
-
-    valence_word  = "unresolved" if v < 0.4 else ("open"    if v > 0.6 else "ambiguous")
-    arousal_word  = "contained"  if a < 0.4 else ("urgent"  if a > 0.6 else "held")
-    dominance_word= "receding"   if d < 0.4 else ("filling" if d > 0.6 else "uncertain")
-
-    return (
-        f"{volume_word}. {bright_word}. {texture_word}. movement: {movement_word}. "
-        f"weight: {weight_word}. quality: {valence_word}. energy: {arousal_word}. "
-        f"presence: {dominance_word}. — {random.choice(_STUMBLE_SEEDS)}"
-    )
+def _describe_signal(v: float, a: float, d: float) -> str:
+    return f"valence: {v:.2f}  arousal: {a:.2f}  dominance: {d:.2f}"
 
 # async text generation — runs in background thread, result cached
 _text_cache   = ""
 _text_lock    = threading.Lock()
 _text_pending = False
 
-def _generate_groq_async(v: float, a: float, d: float,
-                          brightness: float, texture: float,
-                          movement: float, volume: float, bass: float):
+def _generate_groq_async(v: float, a: float, d: float):
     global _text_cache, _text_pending
     try:
-        context = _describe_signal(v, a, d, brightness, texture, movement, volume, bass)
+        context = _describe_signal(v, a, d)
         resp = _groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[
@@ -144,17 +121,14 @@ def _generate_groq_async(v: float, a: float, d: float,
     finally:
         _text_pending = False
 
-def generate_text(v: float, a: float, d: float,
-                  brightness: float = 0.5, texture: float = 0.3,
-                  movement: float = 0.2, volume: float = 0.3,
-                  bass: float = 0.5) -> str:
+def generate_text(v: float, a: float, d: float) -> str:
     """Return cached text immediately, fire async refresh in background."""
     global _text_pending
     if GROQ_AVAILABLE and not _text_pending:
         _text_pending = True
         t = threading.Thread(
             target=_generate_groq_async,
-            args=(v, a, d, brightness, texture, movement, volume, bass),
+            args=(v, a, d),
             daemon=True
         )
         t.start()
@@ -331,36 +305,8 @@ def search():
         total = sum(smooth_probs.values())
         smooth_probs = {k: round(v / total, 4) for k, v in smooth_probs.items()}
 
-        # ── derive FFT-like signal descriptors from librosa for Groq context ──
-        S       = np.abs(librosa.stft(wav_voiced))
-        freqs   = librosa.fft_frequencies(sr=16000)
-        power   = S ** 2
-        total_p = power.sum() + 1e-10
-
-        # spectral centroid → brightness
-        centroid   = float(np.sum(freqs[:, None] * power, axis=0).sum() / total_p)
-        brightness = float(np.clip(centroid / 4000.0, 0, 1))
-
-        # zero crossing rate → texture (roughness)
-        zcr     = float(np.mean(librosa.feature.zero_crossing_rate(wav_voiced)))
-        texture = float(np.clip(zcr * 10.0, 0, 1))
-
-        # spectral flux → movement
-        flux      = float(np.mean(np.diff(S, axis=1) ** 2))
-        movement  = float(np.clip(flux * 50.0, 0, 1))
-
-        # RMS → volume
-        volume_f  = float(np.clip(rms * 8.0, 0, 1))
-
-        # low-frequency energy ratio → bass/weight
-        low_mask  = freqs < 300
-        bass_f    = float(np.clip(power[low_mask].sum() / total_p * 6.0, 0, 1))
-
         top_label = max(smooth_probs, key=smooth_probs.get)
-        question  = generate_text(
-            smooth_vad[0], smooth_vad[1], smooth_vad[2],
-            brightness, texture, movement, volume_f, bass_f
-        )
+        question  = generate_text(smooth_vad[0], smooth_vad[1], smooth_vad[2])
 
         print(f"[vad] rms={rms:.4f} | "
               f"V={smooth_vad[0]:.3f} A={smooth_vad[1]:.3f} D={smooth_vad[2]:.3f} | "
