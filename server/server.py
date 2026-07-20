@@ -88,28 +88,22 @@ Match the mood precisely using all three values together:
 
 Draw from anywhere — literature, philosophy, folk traditions, music, science, film, oral cultures, any century, any language. Range as widely as possible. Each response should feel like it comes from a different corner of human expression.
 
-Strict rules:
-- Only use quotes you are certain are real and accurately worded. If unsure, use a well-known proverb or anonymous folk saying instead.
-- Never fabricate a quote and attribute it to a real person.
-- The quote text must not contain the author's name. The attribution handles that.
-- Prefer quotes between 8 and 16 words. Never go over 20 words before the attribution.
-- One line. No quotation marks. Nothing else."""
+Output format is exactly: the words of the quote, then space-dash-space, then the name of the source.
+Example: The wound is where the light enters — Rumi
+Example: When the well is dry we know the worth of water — Benjamin Franklin
+
+Never begin with "In the words of", "As X said", "According to", "X once wrote", or any other framing phrase. Start directly with the first word of the quote itself.
+Never repeat the attribution name inside the quote text.
+Only use quotes you are certain are real. If unsure, use an anonymous proverb.
+Prefer quotes between 8 and 16 words. Never exceed 20 words before the attribution.
+No quotation marks. Nothing else."""
 
 
 def _describe_signal(v: float, a: float, d: float) -> str:
     return f"valence: {v:.2f}  arousal: {a:.2f}  dominance: {d:.2f}"
 
-import re as _re
-
 def _clean_quote(text: str) -> str:
-    # strip surrounding quotes
-    text = text.strip('"').strip()
-    # remove "In X's voice", "As X said", "X once wrote" preambles
-    text = _re.sub(r'^(in\s+\w+\'s\s+voice[,:]?\s*|as\s+\w+\s+(said|wrote|put it)[,:]?\s*|\w+\s+once\s+(said|wrote)[,:]?\s*)', '', text, flags=_re.IGNORECASE)
-    # if the attribution after " — " contains a name also present verbatim in the body, that's fine;
-    # but strip cases where the body STARTS with "— Name says:" or similar
-    text = _re.sub(r'^—\s*\w+[\w\s]+:\s*', '', text)
-    return text.strip()
+    return text.strip('"').strip()
 
 # async text generation — runs in background thread, result cached
 _text_cache   = ""
