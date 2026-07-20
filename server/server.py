@@ -18,7 +18,7 @@ if os.path.exists(_env_path):
             if _line and not _line.startswith('#') and '=' in _line:
                 _k, _v = _line.split('=', 1)
                 os.environ.setdefault(_k.strip(), _v.strip())
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import torch
 import librosa
@@ -226,6 +226,12 @@ def vad_to_probs(valence: float, arousal: float, dominance: float) -> dict:
     total = sum(scores.values())
     return {k: round(v / total, 4) for k, v in scores.items()}
 
+
+_PRESETS_DIR = os.path.join(os.path.dirname(__file__), '..', 'presets')
+
+@app.route("/presets/<path:filename>")
+def serve_preset(filename):
+    return send_from_directory(_PRESETS_DIR, filename)
 
 @app.route("/health")
 def health():

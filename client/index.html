@@ -709,7 +709,7 @@
   }
 
   async function loadPreset(name){
-    const res = await fetch(`../presets/${name}.json`);
+    const res = await fetch(`http://127.0.0.1:5001/presets/${name}.json`);
     const p   = await res.json();
     applyPreset(p, name);
   }
