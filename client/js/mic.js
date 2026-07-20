@@ -91,10 +91,12 @@ async function sendChunk(blob){
 // Text is drawn onto a 2D canvas overlay. No DOM textContent writes,
 // no layout invalidation, no reflow. Opacity is simulated via globalAlpha.
 const TYPE_CHAR_MS = 48;
-const TEXT_FONT    = '300 22px "Inter", sans-serif';
-const TEXT_COLOR   = 'rgba(255,255,255,0.88)';
-const TEXT_SHADOW_BLUR  = 24;
-const TEXT_SHADOW_COLOR = 'rgba(0,0,0,0.95)';
+const TEXT_FONT        = 'italic 300 28px "Georgia", "Times New Roman", serif';
+const TEXT_ATTR_FONT   = '300 15px "Georgia", "Times New Roman", serif';
+const TEXT_COLOR       = 'rgba(255,255,255,0.90)';
+const TEXT_ATTR_COLOR  = 'rgba(255,255,255,0.50)';
+const TEXT_SHADOW_BLUR  = 18;
+const TEXT_SHADOW_COLOR = 'rgba(0,0,0,0.7)';
 
 let _typeBusy    = false;
 let _typePending = null;
@@ -134,37 +136,62 @@ function _textDraw(alpha){
   if(!_typeText || _typePos === 0 || alpha <= 0) return;
 
   const visible = _typeText.slice(0, _typePos);
-  ctx.globalAlpha     = alpha;
-  ctx.font            = TEXT_FONT;
-  ctx.textAlign       = 'center';
-  ctx.textBaseline    = 'middle';
-  ctx.shadowBlur      = TEXT_SHADOW_BLUR;
-  ctx.shadowColor     = TEXT_SHADOW_COLOR;
-  ctx.fillStyle       = TEXT_COLOR;
 
-  // simple word-wrap at max 900px width
-  const maxW   = Math.min(900, W * 0.8);
-  const lineH  = 36;
-  const words  = visible.split(' ');
-  const lines  = [];
-  let line     = '';
-  for(const w of words){
-    const test = line ? line + ' ' + w : w;
-    if(ctx.measureText(test).width > maxW && line){
-      lines.push(line);
-      line = w;
-    } else {
-      line = test;
+  // split "quote text — Attribution" into body + attribution
+  const dashIdx = visible.lastIndexOf(' — ');
+  const body    = dashIdx > 0 ? visible.slice(0, dashIdx).trim() : visible.trim();
+  const attr    = dashIdx > 0 ? '— ' + visible.slice(dashIdx + 3).trim() : '';
+
+  ctx.globalAlpha  = alpha;
+  ctx.textBaseline = 'top';
+  ctx.shadowBlur   = TEXT_SHADOW_BLUR;
+  ctx.shadowColor  = TEXT_SHADOW_COLOR;
+
+  // word-wrap body
+  const maxW  = Math.min(680, W * 0.72);
+  const lineH = 44;
+  ctx.font = TEXT_FONT;
+
+  function wordWrap(text, font, mW) {
+    ctx.font = font;
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    for(const w of words){
+      const test = line ? line + ' ' + w : w;
+      if(ctx.measureText(test).width > mW && line){ lines.push(line); line = w; }
+      else line = test;
+    }
+    if(line) lines.push(line);
+    return lines;
+  }
+
+  const bodyLines = wordWrap(body, TEXT_FONT, maxW);
+  const attrLines = attr ? wordWrap(attr, TEXT_ATTR_FONT, maxW) : [];
+
+  const totalH = bodyLines.length * lineH + (attrLines.length ? 12 + attrLines.length * 24 : 0);
+  const blockX = (W - maxW) / 2;          // left edge of centred block
+  const startY = H * 0.76 - totalH / 2;  // lower-third, vertically centred in that zone
+
+  // draw body
+  ctx.font      = TEXT_FONT;
+  ctx.fillStyle = TEXT_COLOR;
+  ctx.textAlign = 'left';
+  for(let i = 0; i < bodyLines.length; i++){
+    ctx.fillText(bodyLines[i], blockX, startY + i * lineH);
+  }
+
+  // draw attribution
+  if(attrLines.length){
+    ctx.font      = TEXT_ATTR_FONT;
+    ctx.fillStyle = TEXT_ATTR_COLOR;
+    ctx.shadowBlur = 8;
+    const attrY = startY + bodyLines.length * lineH + 14;
+    for(let i = 0; i < attrLines.length; i++){
+      ctx.fillText(attrLines[i], blockX, attrY + i * 24);
     }
   }
-  if(line) lines.push(line);
 
-  const totalH = lines.length * lineH;
-  const startY = H * 0.78 - totalH / 2;   // ~78% down the screen
-  ctx.shadowBlur = 24;
-  for(let i = 0; i < lines.length; i++){
-    ctx.fillText(lines[i], W / 2, startY + i * lineH);
-  }
   ctx.globalAlpha = 1;
 }
 
