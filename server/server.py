@@ -73,30 +73,16 @@ EMA_ALPHA    = 0.45
 
 # ── Groq text generation ───────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """Live voice installation. Output one line only.
+SYSTEM_PROMPT = """Voice installation. One line only: quote text — Attribution
 
-Format: quote text — Attribution
+valence (0=pain→1=joy), arousal (0=still→1=electric), dominance (0=small→1=expansive).
+Match all three: low-V+high-A=cornered, low-V+low-A=hollow, high-V+high-A=luminous, high-V+low-A=settled, mid=threshold.
 
-The emotional state: valence (0=pain, 1=joy), arousal (0=still, 1=electric), dominance (0=small, 1=expansive).
+Draw from the full breadth of human expression across all eras, geographies, and forms. Resist defaulting to Western canonical sources — actively seek non-European voices, oral traditions, and underrepresented regions.
 
-Match the mood precisely using all three values together:
-- low valence + high arousal = volatile, pressured, cornered
-- low valence + low arousal = heavy, spent, hollow
-- high valence + high arousal = overflowing, luminous, unstoppable
-- high valence + low arousal = settled, open, grateful
-- mid values = suspended, unresolved, threshold
-
-RANGE — DIVERSITY IS MANDATORY: Every response must come from a different corner of human expression than the previous ones. Rotate aggressively across: era (ancient / medieval / early-modern / 20th century / contemporary), geography (Africa, East Asia, South Asia, Americas, Middle East, Oceania, Europe — cycling, never repeating the same region consecutively), and form (poem, proverb, song lyric, letter, speech, novel, philosophy, science writing, oral tradition). Do not default to European or American sources. Actively seek: Tang dynasty poets, Yoruba proverbs, Andean oral tradition, Soviet dissidents, Harlem Renaissance writers, Aboriginal Australian songlines, Caribbean novelists, Norse skalds, Sufi mystics beyond Rumi, Aztec/Maya texts, blues singers, Latin American magical realists, Byzantine monks, Swahili coastal poetry, Māori whakataukī, pre-Islamic Arabian poets, Daoist hermits, Sikh Gurbani, Igbo proverbs, Andean quipus, Persian classical poets beyond Hafez, Inuit oral tradition, Bengal Renaissance writers. This list is a floor, not a ceiling.
-
-Output format is exactly: the words of the quote, then space-dash-space, then the name of the source.
-Example: The wound is where the light enters — Rumi
-Example: When the well is dry we know the worth of water — Benjamin Franklin
-
-Never begin with "In the words of", "As X said", "According to", "X once wrote", or any other framing phrase. Start directly with the first word of the quote itself.
-Never repeat the attribution name inside the quote text.
-Only use quotes you are certain are real. If unsure, use an anonymous proverb from a named tradition (e.g. "Yoruba proverb", "Zen saying", "Māori whakataukī").
-Prefer quotes between 8 and 16 words. Never exceed 20 words before the attribution.
-No quotation marks. Nothing else."""
+Format: first word of the quote itself (no framing phrases). Attribution is a name or named tradition.
+Only use quotes you are certain are real. If unsure, name the tradition (e.g. "Yoruba proverb").
+8–16 words preferred. Never exceed 20 before the attribution. No quotation marks."""
 
 
 def _describe_signal(v: float, a: float, d: float) -> str:
@@ -110,9 +96,11 @@ _text_cache    = ""
 _text_lock     = threading.Lock()
 _text_pending  = False           # True while a Groq call is in flight
 _text_ready    = False           # True when a new quote is waiting to be delivered
+_text_last_call = 0.0            # epoch time of last Groq call fired
+_COOLDOWN_S    = 30              # minimum seconds between Groq calls
 _recent_quotes: list[str] = []   # full "quote — Author" strings
 _recent_authors: list[str] = []  # attribution names only, blocked separately
-_RECENT_MAX    = 20              # block last 20 quotes
+_RECENT_MAX    = 8               # block last 8 quotes
 _AUTHOR_MAX    = 10              # block last 10 authors regardless of quote
 _groq_model    = "none"          # tracks which model last succeeded
 
@@ -179,20 +167,21 @@ def _generate_groq_async(v: float, a: float, d: float, recent_q: list, recent_a:
         _text_pending = False
 
 def generate_text(v: float, a: float, d: float) -> str:
-    """Deliver a quote exactly once when ready, then immediately queue the next one."""
-    global _text_pending, _text_ready
+    """Deliver a quote exactly once when ready, then queue the next after cooldown."""
+    global _text_pending, _text_ready, _text_last_call
+    import time
     with _text_lock:
         ready    = _text_ready
         cached   = _text_cache
         recent_q = list(_recent_quotes)
         recent_a = list(_recent_authors)
         if ready:
-            # consume the ready flag — this quote will be delivered exactly once
             _text_ready = False
 
-    # always keep a Groq call in flight so the next quote is ready quickly
-    if GROQ_AVAILABLE and not _text_pending:
-        _text_pending = True
+    now = time.monotonic()
+    if GROQ_AVAILABLE and not _text_pending and (now - _text_last_call) >= _COOLDOWN_S:
+        _text_pending   = True
+        _text_last_call = now
         t = threading.Thread(
             target=_generate_groq_async,
             args=(v, a, d, recent_q, recent_a),
