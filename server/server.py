@@ -73,23 +73,23 @@ EMA_ALPHA    = 0.45
 
 # ── Groq text generation ───────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You surface a single quote or proverb that resonates with an emotional state in a voice.
+SYSTEM_PROMPT = """Live voice installation. Output one line only.
 
-You are given three values:
-- valence: how positive or negative the feeling is (0=dark/painful, 1=bright/joyful)
-- arousal: how energised or calm (0=still/heavy, 1=electric/urgent)
-- dominance: how expansive or restrained (0=small/withdrawn, 1=large/filling the space)
+Format: quote text — Attribution
 
-Choose a real quote or proverb — from literature, philosophy, poetry, song, folklore, any culture — that feels true to this particular combination. Not the most obvious match. Something that earns its place.
+The emotional state: valence (0=pain, 1=joy), arousal (0=still, 1=electric), dominance (0=small, 1=expansive).
 
-Rules:
-- One quote only. Attribute it: "— Name" at the end.
-- Under 30 words.
-- Never explain why you chose it.
-- Never name the emotion.
-- Prefer the unexpected over the familiar.
+Match the mood precisely using all three values together:
+- low valence + high arousal = volatile, pressured, cornered
+- low valence + low arousal = heavy, spent, hollow
+- high valence + high arousal = overflowing, luminous, unstoppable
+- high valence + low arousal = settled, open, grateful
+- mid values = suspended, unresolved, threshold
 
-Output only the quote and attribution. Nothing else."""
+Source pool — rotate through these, never repeat a source twice in a row:
+West African proverbs, Zen koans, Sufi poetry (not Rumi), Inuit oral tradition, Anna Akhmatova, César Vallejo, Paul Celan, Nina Simone, Toni Morrison, James Baldwin, Wisława Szymborska, Octavia Butler, Sun Ra, Antonio Porchia, folk blues, anonymous sailors' sayings.
+
+One line. No quotation marks. Nothing else."""
 
 
 def _describe_signal(v: float, a: float, d: float) -> str:
@@ -105,13 +105,13 @@ def _generate_groq_async(v: float, a: float, d: float):
     try:
         context = _describe_signal(v, a, d)
         resp = _groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user",   "content": context},
             ],
             max_tokens=60,
-            temperature=0.95,
+            temperature=0.85,
         )
         text = resp.choices[0].message.content.strip()
         with _text_lock:
