@@ -96,7 +96,10 @@ function renderLoop(ts){
   gl.uniform1f(U.tone,       window.fftCurrent.tone);
   gl.uniform1f(U.movement,   window.fftCurrent.movement);
   gl.uniform1f(U.texture,    window.fftCurrent.texture);
-  gl.uniform1f(U.volume,     window.fftCurrent.volume);
+  // transient bloom: boost volume for a brief flash on sudden audio spikes
+  const _tStr   = window._transientStrength || 0;
+  const _tFlash = _tStr * ((window.transientSettings && window.transientSettings.flash) || 0);
+  gl.uniform1f(U.volume, Math.min(1.0, window.fftCurrent.volume + _tFlash));
   gl.uniform1f(U.bass,       window.fftCurrent.bass);
   gl.uniform1f(U.spread,     window.fftCurrent.spread);
 

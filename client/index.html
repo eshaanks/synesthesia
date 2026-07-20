@@ -235,7 +235,7 @@
         <div class="panel-section" style="background:var(--bg-0); border-top:1px solid var(--line);">
           <div class="panel-title" style="color:#fbbf24;">
             Transient
-            <span class="sub">Sudden-change colour nudge</span>
+            <span class="sub">Sudden-change impact flash</span>
           </div>
           <div class="mood-row">
             <div class="p-label">Threshold<small>lower = triggers more easily</small></div>
@@ -244,10 +244,16 @@
             <div class="p-value" id="val-trans-thresh">3.5</div>
           </div>
           <div class="mood-row">
-            <div class="p-label">Nudge<small>hue shift amount on hit</small></div>
-            <input type="range" min="0" max="0.5" step="0.01" value="0.33"
+            <div class="p-label">Palette Spread<small>widens colour sweep on hit</small></div>
+            <input type="range" min="0" max="0.5" step="0.01" value="0.25"
               oninput="window.transientSettings.nudge=+this.value; document.getElementById('val-trans-nudge').textContent=(+this.value).toFixed(2)">
-            <div class="p-value" id="val-trans-nudge">0.33</div>
+            <div class="p-value" id="val-trans-nudge">0.25</div>
+          </div>
+          <div class="mood-row">
+            <div class="p-label">Bloom Flash<small>brightness burst on hit</small></div>
+            <input type="range" min="0" max="1" step="0.01" value="0.6"
+              oninput="window.transientSettings.flash=+this.value; document.getElementById('val-trans-flash').textContent=(+this.value).toFixed(2)">
+            <div class="p-value" id="val-trans-flash">0.60</div>
           </div>
         </div>
 
@@ -595,7 +601,9 @@
     const _colourCurrent = { colorRadius: 0.74, hueShift: 0.0, colorBand: 0.7 };
 
     // transient flash settings — exposed so sliders can mutate them
-    window.transientSettings = { threshold: 3.5, nudge: 0.33 };
+    // nudge: how much colorBand widens on impact (0=none, 0.5=full sweep shift)
+    // flash: volume boost multiplier on impact (0=none, 1=full glow bloom)
+    window.transientSettings = { threshold: 3.5, nudge: 0.25, flash: 0.6 };
 
     function pushColourUniforms(){
       if(typeof U === 'undefined' || typeof gl === 'undefined') return;
@@ -617,11 +625,15 @@
         _colourCurrent[k] += (target - _colourCurrent[k]) * a;
       });
 
-      // transient hueShift nudge — adds on top, decays with transientStrength
-      const nudge = (window._transientStrength || 0) * (window.transientSettings.nudge);
+      const str = window._transientStrength || 0;
+      // colorBand widens briefly — sweeps further into the palette's col1→col2 range
+      // no fract() / wrap, so no threshold discontinuity or contour lines
+      const bandNudge = str * (window.transientSettings.nudge);
+      // volume flash is injected in transition.js right before gl.uniform1f(U.volume)
+
       gl.uniform1f(U.colorRadius, _colourCurrent.colorRadius);
-      gl.uniform1f(U.hueShift,    (_colourCurrent.hueShift + nudge) % 1.0);
-      gl.uniform1f(U.colorBand,   _colourCurrent.colorBand);
+      gl.uniform1f(U.hueShift,    _colourCurrent.hueShift);
+      gl.uniform1f(U.colorBand,   Math.min(1.0, _colourCurrent.colorBand + bandNudge));
     }
 
     const _origGlobalTick = window._globalTick;
