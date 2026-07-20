@@ -107,9 +107,9 @@ def _clean_quote(text: str) -> str:
 
 # async text generation — runs in background thread, result cached
 _text_cache    = ""
-_text_last_sent = ""             # last quote actually delivered to the client
 _text_lock     = threading.Lock()
-_text_pending  = False
+_text_pending  = False           # True while a Groq call is in flight
+_text_ready    = False           # True when a new quote is waiting to be delivered
 _recent_quotes: list[str] = []   # full "quote — Author" strings
 _recent_authors: list[str] = []  # attribution names only, blocked separately
 _RECENT_MAX    = 20              # block last 20 quotes
@@ -123,13 +123,11 @@ def _extract_author(text: str) -> str:
     idx = text.rfind(" — ")
     return text[idx + 3:].strip() if idx >= 0 else ""
 
-def _generate_groq_async(v: float, a: float, d: float):
-    global _text_cache, _text_pending, _recent_quotes, _recent_authors, _groq_model
+def _generate_groq_async(v: float, a: float, d: float, recent_q: list, recent_a: list):
+    global _text_cache, _text_pending, _text_ready, _recent_quotes, _recent_authors, _groq_model
     try:
         context = _describe_signal(v, a, d)
-        with _text_lock:
-            recent_q = list(_recent_quotes)
-            recent_a = list(_recent_authors)
+        # recent_q / recent_a are snapshots passed in by the caller — no lock needed here
 
         avoid_parts = []
         if recent_q:
@@ -165,6 +163,7 @@ def _generate_groq_async(v: float, a: float, d: float):
         author = _extract_author(text)
         with _text_lock:
             _text_cache = text
+            _text_ready = True
             _groq_model = used_model
             _recent_quotes.append(text)
             if len(_recent_quotes) > _RECENT_MAX:
@@ -180,21 +179,28 @@ def _generate_groq_async(v: float, a: float, d: float):
         _text_pending = False
 
 def generate_text(v: float, a: float, d: float) -> str:
-    """Return the quote only when it's new — empty string means client shows nothing."""
-    global _text_pending, _text_last_sent
+    """Deliver a quote exactly once when ready, then immediately queue the next one."""
+    global _text_pending, _text_ready
+    with _text_lock:
+        ready    = _text_ready
+        cached   = _text_cache
+        recent_q = list(_recent_quotes)
+        recent_a = list(_recent_authors)
+        if ready:
+            # consume the ready flag — this quote will be delivered exactly once
+            _text_ready = False
+
+    # always keep a Groq call in flight so the next quote is ready quickly
     if GROQ_AVAILABLE and not _text_pending:
         _text_pending = True
         t = threading.Thread(
             target=_generate_groq_async,
-            args=(v, a, d),
+            args=(v, a, d, recent_q, recent_a),
             daemon=True
         )
         t.start()
-    with _text_lock:
-        if _text_cache and _text_cache != _text_last_sent:
-            _text_last_sent = _text_cache
-            return _text_cache
-    return ""
+
+    return cached if ready else ""
 
 # ── fragment bank fallback ─────────────────────────────────────────────────────
 # Used when Groq is unavailable or on the first call before response arrives.
