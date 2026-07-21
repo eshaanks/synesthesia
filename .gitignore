@@ -30,3 +30,4 @@ embeddings/
 node_modules/
 wav2vec2_checkpoints/
 model_cache/
+synesthesia.tar.gz

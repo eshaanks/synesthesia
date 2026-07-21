@@ -22,13 +22,25 @@ for MODEL in \
 do
   if [ -d "$HF_CACHE/$MODEL" ]; then
     echo "  → $MODEL"
-    cp -r "$HF_CACHE/$MODEL" "$MODEL_CACHE/"
+    cp -rP "$HF_CACHE/$MODEL" "$MODEL_CACHE/"
   else
     echo "  ✗ $MODEL not found in $HF_CACHE"
     echo "    Start the server once to download it, then re-run build.sh"
     exit 1
   fi
 done
+
+# drop pytorch_model.bin snapshot for wavlm-large — safetensors is preferred
+# and keeping both doubles the blob storage inside the image
+WAVLM_SNAPS="$MODEL_CACHE/models--microsoft--wavlm-large/snapshots"
+if [ -d "$WAVLM_SNAPS" ]; then
+  for SNAP in "$WAVLM_SNAPS"/*/; do
+    if [ -e "$SNAP/pytorch_model.bin" ] && ! [ -e "$SNAP/model.safetensors" ]; then
+      echo "  removing pytorch-only snapshot: $(basename $SNAP)"
+      rm -rf "$SNAP"
+    fi
+  done
+fi
 
 # ── 2. build Docker image ─────────────────────────────────────────────────────
 echo "[2/4] building Docker image..."
