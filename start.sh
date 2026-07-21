@@ -8,10 +8,18 @@ if [ ! -f ".venv/bin/python3" ]; then
   echo "First run — setting up Python environment (this takes a few minutes)..."
   python3 -m venv .venv
   .venv/bin/pip install --upgrade pip -q
-  .venv/bin/pip install -r server/requirements.txt
+  # torch needs PyTorch index for CPU wheels; PyPI as primary avoids typing-extensions name mismatch
+  .venv/bin/pip install torch==2.12.0 torchaudio==2.11.0 \
+    --extra-index-url https://download.pytorch.org/whl/cpu
+  grep -vE "^torch" server/requirements.txt | .venv/bin/pip install -r /dev/stdin
   echo "Setup complete."
 fi
 PYTHON=".venv/bin/python3"
+
+# on first run the server will download model weights (~2.4 GB) from HuggingFace
+if [ ! -d "$HOME/.cache/huggingface/hub/models--tiantiaf--wavlm-large-msp-podcast-emotion-dim" ]; then
+  echo "Note: first server start will download model weights (~2.4 GB) — needs internet."
+fi
 
 pkill -f "server/server.py" 2>/dev/null || true
 sleep 0.5
