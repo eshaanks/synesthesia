@@ -3,17 +3,15 @@
 set -e
 cd "$(dirname "$0")"
 
-# use local venv if present, otherwise fall back to system python3
-if [ -f ".venv/bin/python3" ]; then
-  PYTHON=".venv/bin/python3"
-elif [ -f "venv/bin/python3" ]; then
-  PYTHON="venv/bin/python3"
-elif command -v python3 &>/dev/null; then
-  PYTHON="python3"
-else
-  echo "ERROR: python3 not found. Create a venv with 'python3 -m venv .venv && .venv/bin/pip install -r server/requirements.txt'"
-  exit 1
+# create venv and install deps on first run
+if [ ! -f ".venv/bin/python3" ]; then
+  echo "First run — setting up Python environment (this takes a few minutes)..."
+  python3 -m venv .venv
+  .venv/bin/pip install --upgrade pip -q
+  .venv/bin/pip install -r server/requirements.txt
+  echo "Setup complete."
 fi
+PYTHON=".venv/bin/python3"
 
 pkill -f "server/server.py" 2>/dev/null || true
 sleep 0.5
