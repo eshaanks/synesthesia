@@ -3,12 +3,15 @@
 set -e
 cd "$(dirname "$0")"
 
-VENV="/Users/aiswaryashybu/ART+CODE/Proj/ImageBind/imagebind-env"
-PYTHON="$VENV/bin/python3"
-
-if [ ! -f "$PYTHON" ]; then
-  echo "ERROR: Python env not found at $VENV"
-  echo "Update the VENV path in start.sh to match your environment."
+# use local venv if present, otherwise fall back to system python3
+if [ -f ".venv/bin/python3" ]; then
+  PYTHON=".venv/bin/python3"
+elif [ -f "venv/bin/python3" ]; then
+  PYTHON="venv/bin/python3"
+elif command -v python3 &>/dev/null; then
+  PYTHON="python3"
+else
+  echo "ERROR: python3 not found. Create a venv with 'python3 -m venv .venv && .venv/bin/pip install -r server/requirements.txt'"
   exit 1
 fi
 
